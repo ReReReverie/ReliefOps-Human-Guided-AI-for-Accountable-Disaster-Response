@@ -1,12 +1,24 @@
-# ReliefOps MVP Implementation Plan
+# ReliefOps Full Implementation Roadmap
 
 ## Status and authority
 
-This document is the authoritative implementation specification for the ReliefOps MVP. The repository is a greenfield project, and implementation must be performed inside IBM Bob.
+This document is the full post-MVP implementation roadmap for ReliefOps. While IBM Bob credits and team time are constrained, `docs/implementation-plan-lean-mvp.md` is the authoritative build specification and must be completed first.
 
-IBM Bob should execute the phases in order, validate each phase, and stop at each phase gate before continuing. Implementation decisions that contradict this document require the plan to be updated first.
+When the team intentionally begins this roadmap, the IBM Bob manager must delegate the phases in order, delegate each phase's implementation and validation to worker subagents, and stop at every phase gate. Implementation decisions that contradict either plan require the plans to be updated first.
 
 The three-minute challenge video is intentionally excluded. This plan covers only the working prototype, tests, local runtime, deployment-independent architecture, and challenge documentation foundation.
+
+### Required AI-phase pre-read
+
+The AI phase is not self-contained. Before delegating or implementing Phase 2, both the IBM Bob manager and its assigned worker must read `docs/chatbot-specification.md` in full. The manager must name that file in the worker task, and the worker must confirm it used the file and map its chatbot implementation and tests back to the contract. A summary or copied prompt excerpt is not a substitute for reading the file.
+
+### Scope lock: do not deviate
+
+This roadmap is a scope contract. When a roadmap phase is intentionally started, implement only the features, routes, tables, integrations, dependencies, and validation explicitly required by that phase, its gate, the safety invariants, the test plan, or the definition of done.
+
+Do not add nice-to-have features, speculative requirements, generic abstractions, optional providers, extra roles, new infrastructure, unrelated refactors, anything outside the active phase, or anything marked excluded, deferred, or optional later. Every changed file must map to an explicit active-phase requirement.
+
+For an unspecified implementation detail, use the smallest conventional solution that preserves the documented architecture without expanding product scope. If a missing decision would alter behavior, architecture, dependencies, data ownership, security boundaries, or scope, stop and report it. The plan must be updated and approved before that work is delegated or implemented; neither the manager nor a worker may silently improvise a substitute.
 
 ## 1. Product objective
 
@@ -17,22 +29,22 @@ ReliefOps is a human-supervised disaster coordination system with two principal 
 
 IBM Granite is a decision-support collaborator. It must never become the final authority for urgency, resource allocation, dispatch, delivery, or case closure.
 
-### MVP acceptance outcomes
+### Full-roadmap acceptance outcomes
 
 The implementation is complete when it can demonstrate all of the following with synthetic data:
 
-1. A reporter creates a relief case through web chat.
-2. Granite extracts structured facts and asks only for missing information.
-3. Granite produces an urgency suggestion with evidence, confidence, and missing information.
-4. A coordinator reviews the breakdown and sets the authoritative urgency.
-5. A coordinator takes over the conversation without simultaneous AI replies.
-6. Granite proposes a dependency-aware task plan using known resources and responder requirements.
-7. A coordinator edits and approves the plan, reserves resources, and assigns responders.
-8. Responders update assigned tasks and record delivery evidence.
-9. A reporter receives status updates and can confirm delivery.
-10. Important lifecycle records are hashed, batched, and anchored on Stellar Testnet.
-11. An authorized verifier can prove an audit record belongs to an anchored batch.
-12. Modifying an anchored off-chain record causes verification to fail.
+1. A reporter sends a first message and creates a relief case through web chat.
+2. The server records the first-message receive time and immediately anchors one privacy-safe `CHAT_STARTED` commitment for that conversation on Stellar Testnet.
+3. Granite extracts structured facts and asks only for missing information.
+4. Granite produces an urgency suggestion with evidence, confidence, and missing information.
+5. A coordinator reviews the breakdown and sets the authoritative urgency.
+6. A coordinator takes over the conversation without simultaneous AI replies.
+7. Granite proposes a dependency-aware task plan using known resources and responder requirements.
+8. A coordinator edits and approves the plan, reserves resources, and assigns responders.
+9. Responders update assigned tasks and record delivery evidence.
+10. A reporter receives status updates and can confirm delivery.
+11. An authorized verifier can compare the claimed conversation-start time with the Stellar ledger close time and verify the commitment.
+12. Modifying the stored start record causes verification to fail.
 
 ### Safety invariants
 
@@ -40,12 +52,13 @@ The implementation is complete when it can demonstrate all of the following with
 - A human final urgency is required before dispatch or resource reservation.
 - AI cannot approve, assign, dispatch, confirm delivery, or close a case.
 - No AI message is sent while a conversation is under human control.
+- Every conversation receives at most one on-chain `CHAT_STARTED` commitment, created from its first successfully saved reporter message.
 - Raw messages, names, contact details, coordinates, documents, and photos never enter Stellar transaction data.
 - AI and blockchain failures never discard a report or block operational work.
 - Corrections append new records; historical decisions are not silently overwritten.
 - The public prototype accepts synthetic data only and states that it is not an emergency service.
 
-## 2. MVP scope
+## 2. Full roadmap scope
 
 ### Included
 
@@ -59,12 +72,11 @@ The implementation is complete when it can demonstrate all of the following with
 - Human-approved tasks, responders, and resources
 - Responder mobile-friendly task interface
 - Delivery evidence and reporter confirmation
-- Supabase authentication, database, private storage, and Realtime
+- Neon Postgres, Neon Auth for staff, server-issued reporter sessions, private object storage, and application polling
 - Ollama with IBM Granite 4.1 3B
 - Deterministic mock AI provider
-- Stellar Testnet Soroban audit contract
-- Merkle batching and verification
-- Unit, integration, contract, and end-to-end tests
+- One immediate Stellar Testnet `CHAT_STARTED` commitment per conversation and verification
+- Unit, integration, and end-to-end tests
 - IBM Bob development log and challenge-ready README foundation
 
 ### Excluded
@@ -73,7 +85,7 @@ The implementation is complete when it can demonstrate all of the following with
 - SMS, WhatsApp, Messenger, email, or voice channels
 - Cryptocurrency donations, tokenized aid, or payments
 - Stellar Mainnet
-- Raw documents or one blockchain transaction per message
+- Raw documents, message content, timed audit batches, Merkle proofs, custom Soroban contracts, or one blockchain transaction per message
 - Autonomous final urgency, allocation, assignment, or dispatch
 - Cross-organization wallets and multisignature approval
 - AI image interpretation
@@ -89,17 +101,18 @@ The implementation is complete when it can demonstrate all of the following with
 Reporter browser ------+
 Coordinator dashboard -+--> Local Next.js application
 Responder portal ------+        |
-                                 +--> Supabase Free
-                                 |    Auth, Postgres, Storage, Realtime
+                                 +--> Neon Free
+                                 |    Postgres + Neon Auth for staff
+                                 |
+                                 +--> Private S3-compatible object storage
+                                 |    (post-MVP attachments only)
                                  |
                                  +--> AI provider interface
                                  |      |- OllamaAiProvider
                                  |      |- MockAiProvider
                                  |      `- WatsonxAiProvider (optional later)
                                  |
-                                 `--> Audit batching service
-                                           |
-                                           `--> Stellar Testnet Soroban contract
+                                 `--> Stellar SDK --> Stellar Testnet
 ```
 
 ### Selected technologies
@@ -110,23 +123,22 @@ Responder portal ------+        |
 | Web | Latest security-patched Next.js 16.3.x, App Router, React, TypeScript |
 | Styling | Tailwind CSS with accessible reusable components |
 | Validation | Zod at every untrusted boundary |
-| Database | Supabase Postgres Free |
-| Authentication | Supabase anonymous auth and email magic links |
-| File storage | Private Supabase Storage bucket |
-| Live updates | Supabase Realtime Postgres Changes for MVP scale |
+| Database | Neon Postgres Free with Drizzle ORM; all access is server-side |
+| Authentication | Server-issued reporter session cookies and Neon Auth for staff |
+| File storage | Private S3-compatible storage behind an adapter; excluded from the lean MVP |
+| Live updates | Short polling after writes; consider SSE only after the core workflow is stable |
 | AI runtime | Native Windows Ollama on the demonstration computer |
 | AI model | `granite4.1:3b` |
-| Blockchain | Stellar Testnet and a Rust Soroban contract |
+| Blockchain | `@stellar/stellar-sdk`, Horizon, and Stellar Testnet `Manage Data` operations |
 | Unit tests | Vitest |
 | Browser tests | Playwright |
-| Contract tests | Rust `cargo test` |
 
 ### Next.js boundaries
 
 - Use Server Components for initial dashboard and case-detail reads.
 - Use Server Actions for authenticated internal mutations.
 - Use Route Handlers for public chat, attachments, verification, and provider callbacks.
-- Use Client Components only for chat, live subscriptions, task interaction, and other browser state.
+- Use Client Components only for chat, polling, task interaction, and other browser state.
 - Use the Node.js runtime for database, cryptography, Ollama, and Stellar operations.
 - Treat route protection as navigation convenience; every server operation must independently authenticate and authorize the caller.
 
@@ -154,23 +166,21 @@ src/
     audit/
     auth/
     stellar/
-    supabase/
+    db.ts
   server/
     actions/
     services/
 
-supabase/
+drizzle/
   migrations/
-  seed.sql
-
-contracts/
-  reliefops-audit/
+  seed.ts
 
 tests/
   e2e/
   fixtures/
 
 docs/
+  chatbot-specification.md
   implementation-plan.md
   architecture.md
   bob-development-log.md
@@ -178,11 +188,14 @@ docs/
 
 Use one repository without a monorepo orchestration framework.
 
+Next.js, Ollama, and the browsers run locally on the demonstration computer. Neon, Stellar, and any later object-storage provider remain network services, so this design requires internet access while avoiding additional database or blockchain RAM use on the 16 GB machine.
+
 ## 4. Roles and authorization
 
 ### Reporter
 
-- Authenticates through a Supabase anonymous user.
+- Uses no account or Neon Auth identity.
+- Receives a cryptographically random 32-byte token in an `HttpOnly`, `SameSite=Lax` cookie; only `HMAC-SHA-256(REPORTER_SESSION_PEPPER, token)` is stored in Neon.
 - Creates and reads only their own case and conversation.
 - Adds messages and approved attachment types.
 - Requests a human and receives status updates.
@@ -191,7 +204,7 @@ Use one repository without a monorepo orchestration framework.
 
 ### Coordinator
 
-- Authenticates through email magic link.
+- Authenticates through Neon Auth.
 - Reviews the case queue and all operational case information.
 - Sets and revises final urgency.
 - Takes over, transfers, and releases conversations.
@@ -201,7 +214,7 @@ Use one repository without a monorepo orchestration framework.
 
 ### Responder
 
-- Authenticates through email magic link.
+- Authenticates through Neon Auth.
 - Reads only tasks assigned to them and the minimum case details required to act.
 - Accepts an assignment or reports inability to perform it.
 - Advances permitted task states and uploads evidence.
@@ -212,15 +225,16 @@ Use one repository without a monorepo orchestration framework.
 - Creates and manages coordinator and responder profiles.
 - Manages roles, responder skills, availability, and resource inventory.
 - Reviews failed AI and audit operations.
-- Retries failed Stellar batches.
+- Retries failed Stellar session-start anchors.
 
 ### Authorization implementation
 
-- Enable RLS on every exposed table.
-- Revoke default table privileges before granting the minimum required privileges.
-- Distinguish Supabase anonymous users from staff users through JWT claims and profiles.
-- Keep `SUPABASE_SERVICE_ROLE_KEY` server-only.
-- Add negative authorization tests for every role and sensitive table.
+- Route all database access through authenticated and authorized server functions; never expose Neon credentials or a direct database client to the browser.
+- Reporter functions derive `HMAC-SHA-256(REPORTER_SESSION_PEPPER, token)` and use a constant-time comparison against the stored session hash.
+- Staff functions validate the Neon Auth session and then enforce the role stored in `profiles`.
+- Check `Origin` on cookie-authenticated mutations, use `SameSite=Lax`, and set `Secure` outside local HTTP development.
+- Use separate migration and runtime credentials where available, and grant the runtime role only the privileges it needs.
+- Add negative authorization tests for every role, reporter session, and sensitive table.
 
 ## 5. Domain states and workflows
 
@@ -256,7 +270,7 @@ Conversation rules:
 - If the coordinator disconnects, the conversation remains human-controlled.
 - Returning to AI creates a proposed summary and case-fact patch.
 - The coordinator reviews and confirms the patch before AI messaging resumes.
-- Takeover, transfer, and return events generate append-only audit records.
+- Takeover, transfer, and return events generate append-only off-chain operational events.
 
 ### Task states
 
@@ -282,7 +296,7 @@ All primary keys use UUIDs. All mutable entities include `created_at`, `updated_
 
 ### `profiles`
 
-- Supabase user ID
+- Neon Auth user ID
 - Role: `ADMIN`, `COORDINATOR`, or `RESPONDER`
 - Display name
 - Responder skills
@@ -292,13 +306,20 @@ All primary keys use UUIDs. All mutable entities include `created_at`, `updated_
 ### `relief_cases`
 
 - Internal UUID and non-guessable public reference
-- Reporter user ID
+- Reporter session ID
 - Case status
 - Confirmed structured facts
 - Need categories, hazards, affected-person count, vulnerability indicators
 - Location label and optional coordinates
 - Current authoritative urgency derived from the latest human decision
-- Current conversation and audit versions
+- Current conversation version and chat-start audit status
+
+### `reporter_sessions`
+
+- Internal UUID
+- HMAC-SHA-256 hash of the random browser token; never store the raw token
+- Created, first-message-received, last-active, revoked, and expiry timestamps
+- Optional IP-derived abuse signal only if explicitly needed; never store it in the blockchain payload
 
 ### `conversations`
 
@@ -314,7 +335,7 @@ All primary keys use UUIDs. All mutable entities include `created_at`, `updated_
 - Conversation ID
 - Sender type: `REPORTER`, `AI`, `COORDINATOR`, or `SYSTEM`
 - Optional authenticated sender ID
-- Plain-text body protected by RLS
+- Plain-text body available only through server-side authorization checks
 - Client-generated idempotency key
 - Timestamp
 
@@ -334,7 +355,8 @@ All primary keys use UUIDs. All mutable entities include `created_at`, `updated_
 - Provider and model ID
 - Prompt version
 - Input snapshot hash
-- Validated output JSON
+- Validated output JSON, including communication signals when the operation analyzes intake
+- Never a corrected or normalized replacement for the raw reporter message
 - Latency and token counts when available
 - Status, retry count, and safe error code
 
@@ -377,25 +399,25 @@ The service rejects self-dependencies and cyclic graphs.
 
 ### `audit_records`
 
-- Event ID and type
-- Entity type and opaque entity ID
-- Actor ID
+- Audit ID and event type fixed to `CHAT_STARTED`
+- Case, conversation, and opaque session identifiers
+- First reporter message ID and server receive time
 - Canonical payload JSON
 - Random 32-byte nonce
-- Previous record hash for the case
-- Leaf hash
+- SHA-256 record hash
 - Status: `PENDING`, `ANCHORING`, `ANCHORED`, or `FAILED`
-- Batch ID, leaf index, and Merkle proof after anchoring
+- Stellar transaction hash, ledger sequence, ledger close time, retry count, and safe error code
 
-### `audit_batches`
+Enforce a unique constraint on `(conversation_id, event_type)` so retries cannot create multiple start records.
 
-- Batch ID hash
-- Merkle root and previous batch root
-- Record count
-- Schema version
-- Stellar network and contract ID
-- Transaction hash and ledger sequence
-- Status, retry count, and last safe error
+### `operational_events`
+
+- Event ID, event type, and affected entity
+- Authenticated actor ID or opaque reporter-session ID
+- Append-only payload JSON and server timestamp
+- Model and prompt version when the event records AI output
+
+These records provide the detailed off-chain history for urgency decisions, takeover, task approval, assignment, delivery, and closure. They are not individually sent to Stellar.
 
 ## 7. Local AI implementation
 
@@ -440,6 +462,7 @@ Each inference receives only:
 - Current authoritative human decision when one exists
 - Latest AI assessment when relevant
 - Last 8-12 relevant messages
+- Deterministic capitalization statistics for the latest raw reporter message when processing intake
 - A compact rolling conversation summary
 
 Do not continually resend the complete transcript. Refresh the rolling summary before the context exceeds the configured budget.
@@ -453,6 +476,7 @@ type IntakeResult = {
   missingFields: string[]
   safetyAlert: boolean
   intakeComplete: boolean
+  communicationSignals: CommunicationSignals
 }
 
 type UrgencySuggestion = {
@@ -475,6 +499,8 @@ type HandoffSummary = {
   unresolvedQuestions: string[]
 }
 ```
+
+`CommunicationSignals` and the rules for analysis-only spelling normalization, deterministic capitalization statistics, possible-distress labels, and raw-message preservation are defined in `docs/chatbot-specification.md`. Full-roadmap types may extend the intake result but may not weaken or duplicate that contract inconsistently.
 
 Every response is parsed as JSON and validated with Zod. Use temperature `0`, a fixed seed when supported, one JSON-repair attempt, and then a deterministic human-review fallback.
 
@@ -524,15 +550,16 @@ No dispatch or resource reservation is allowed until a coordinator records a fin
 
 ### Intake flow
 
-1. Create an anonymous Supabase user and conversation.
-2. Show the safety notice and obtain confirmation that the prototype uses synthetic data.
-3. Accept a message with a 2,000-character maximum.
-4. Save it with a client idempotency key.
-5. Run deterministic emergency-phrase detection for an immediate safety banner.
-6. If AI controls the conversation, invoke `processIntake`.
-7. Validate and store the AI response and proposed facts.
-8. Ask the reporter to confirm the structured summary.
-9. After confirmation, append an AI urgency suggestion and send the case to human review.
+1. Show the safety notice and obtain confirmation that the prototype uses synthetic data.
+2. Accept the first message with a 2,000-character maximum and a client idempotency key.
+3. Generate a random reporter token, then create the session, case, conversation, first message, and pending `CHAT_STARTED` record in one database transaction.
+4. Return the raw reporter token only in an `HttpOnly` cookie.
+5. After the transaction commits, immediately attempt the Stellar anchor; never roll back the report when Stellar fails.
+6. Run deterministic emergency-phrase detection for an immediate safety banner.
+7. If AI controls the conversation, invoke `processIntake`.
+8. Validate and store the AI response and proposed facts.
+9. Ask the reporter to confirm the structured summary.
+10. After confirmation, append an AI urgency suggestion and send the case to human review.
 
 ### Human takeover
 
@@ -553,7 +580,7 @@ No dispatch or resource reservation is allowed until a coordinator records a fin
 /                         Landing and safety notice
 /report                   Reporter chatbot
 /track/[reference]        Reporter status
-/verify/[batchId]         Public batch verification
+/verify/[auditId]         Session-start verification
 /login                    Staff authentication
 /ops                      Coordinator case queue
 /ops/cases/[id]           Case, chat, urgency, plan, and audit detail
@@ -569,11 +596,12 @@ Display:
 - Confirmed facts and reporter-provided evidence
 - Conversation with takeover controls
 - AI urgency suggestion, factor evidence, confidence, and missing information
+- Separately labelled **Possible Communication Distress (AI, non-diagnostic)** cues without a corrected transcript
 - Human final urgency and complete revision history
 - Proposed and approved task graph
 - Resource reservations and responder candidates
 - Append-only operational timeline
-- Audit anchoring status and verification links
+- Session-start anchor status, claimed receive time, ledger close time, and verification link
 
 ### Task board
 
@@ -586,7 +614,7 @@ Display:
 
 ### Off-chain records
 
-Keep all readable data in Supabase:
+Keep all readable and operational data in Neon or private object storage:
 
 - Messages
 - Names and contact details
@@ -596,114 +624,90 @@ Keep all readable data in Supabase:
 - Tasks and resource information
 - Attachments and delivery evidence
 
-### On-chain contract data
+The immutable start-record payload and its nonce also remain off-chain in Neon.
 
-Submit only:
+### What is committed
+
+Create exactly one audit record for each conversation session when its first reporter message is successfully saved. Canonical JSON contains only:
 
 ```text
-batch_id_hash
-merkle_root
-previous_merkle_root
-record_count
 schema_version
+audit_id
+event_type = CHAT_STARTED
+opaque_case_id
+opaque_session_id
+first_message_received_at_utc
 ```
 
-The transaction signer and ledger supply the organizational identity and timestamp.
+Do not include the message body, reporter identity, contact details, location, AI output, urgency, tasks, attachments, or secrets.
 
-### Audit record creation
+### Hashing and submission
 
-For each important domain event:
-
-1. Create canonical JSON containing the event ID, opaque case ID, event type, actor ID, server timestamp, payload, model/prompt version when applicable, and previous case-record hash.
-2. Generate a cryptographically random 32-byte nonce.
-3. Compute the leaf:
+1. Create the case, conversation, first message, and pending start record in one Neon transaction.
+2. Serialize the start-record payload with deterministic key ordering.
+3. Generate a cryptographically random 32-byte nonce.
+4. Compute:
 
 ```text
-SHA256(0x00 || nonce || canonical_json)
+SHA256("reliefops:chat-start:v1" || nonce || canonical_json_utf8)
 ```
 
-4. Build an ordered Merkle tree using:
+5. Store the payload, nonce, and hex hash in Neon.
+6. After the database transaction commits, submit the raw 32-byte hash through a standard Stellar `Manage Data` operation:
 
 ```text
-SHA256(0x01 || left_hash || right_hash)
+name:  reliefops.chat-start.v1
+value: <32 raw hash bytes>
 ```
 
-5. Duplicate the final leaf when a level has an odd count.
-6. Store the leaf index and proof off-chain.
-7. Submit only the root and compact batch metadata to Stellar.
+7. Store the transaction hash, ledger sequence, and ledger close time on the existing audit record.
 
-### Audited events
+Use the same data-entry name for each session; earlier values remain visible in transaction history. Enforce a unique database constraint on `(conversation_id, event_type)`, and make submission retries idempotent so one conversation cannot generate multiple intended start records.
 
-- Intake confirmed
-- AI urgency suggested
-- Human urgency selected or revised
-- Conversation takeover, transfer, and release
-- AI task plan generated
-- Task plan approved
-- Resource allocation approved
-- Dispatch confirmed
-- Delivery recorded
-- Reporter delivery confirmation or dispute
-- Case closed, cancelled, or corrected
+This design deliberately uses one Stellar transaction per conversation session, not a transaction per message and not a timed batch. It avoids a Soroban contract, Rust workspace, contract deployment, TTL handling, and Merkle proofs.
 
-### Batching policy
+### Evidence semantics
 
-- Routine events remain `PENDING`.
-- AI urgency, human urgency, plan approval, dispatch, delivery, and closure flush all pending records up to 100.
-- Reaching 100 pending records also flushes a batch.
-- Chat messages do not create individual blockchain transactions.
-- A Stellar failure leaves domain work committed and audit records pending.
-- Administrators can safely retry failed batches.
-- Case closure shows `AUDIT_PENDING` until the final batch anchors successfully.
+The database timestamp is ReliefOps' claim about when the first message reached the server. A matching Stellar transaction proves ReliefOps committed to that exact record no later than the ledger close time. Submitting immediately makes the two times close enough to demonstrate timely recording.
 
-### Soroban contract
+This does not prove the reporter's identity, the message contents, whether an operator saw or answered it, or that the application server's clock was exact. Those limitations must be stated on the verification page and in any legal or administrative explanation.
 
-Implement:
+### Failure and retry behavior
 
-```text
-initialize(admin)
-anchor_batch(batch_id_hash, merkle_root, previous_root, record_count, schema_version)
-get_latest_root()
-get_sequence()
-```
-
-Contract rules:
-
-- Require authorization from the configured audit account.
-- Accept record counts from 1 through 100.
-- Require `previous_root` to match the current latest root.
-- Store only the admin, latest root, and sequence in instance storage.
-- Increment sequence after every successful anchor.
-- Extend instance TTL on successful anchoring.
-- Emit a compact `AuditBatchAnchored` event.
-- Never store case records, files, or individual document hashes.
-
-Use Stellar Testnet only. Fund the audit account with Friendbot fake XLM. Add a startup guard that refuses Mainnet configuration in the MVP.
+- Case creation and the first message commit before the Stellar request starts.
+- A Stellar timeout or rejection marks the audit `FAILED`; it never deletes the report or blocks AI or human work.
+- An administrator may retry the existing record. A successful retry changes it to `ANCHORED` and cannot create a second audit row.
+- A delayed retry proves that the record existed by the later ledger close time; it cannot retroactively prove that it was anchored at the claimed start time.
+- Detailed urgency, takeover, task, delivery, and closure events stay in the append-only `operational_events` table and are not sent on-chain.
 
 ### Verification
 
-The public batch page displays:
+`/verify/[auditId]` must:
 
-- Batch ID
-- Root and previous root
-- Record count
-- Stellar network and contract
-- Transaction hash and ledger
-- Verification status
+1. Load the immutable off-chain payload and nonce through an authorized server function.
+2. Recompute the salted hash.
+3. Fetch the saved Stellar transaction and `Manage Data` operation through Horizon.
+4. Decode the on-chain value and compare it with the recomputed and stored hashes.
+5. Show the claimed first-message receive time next to the Stellar ledger close time.
+6. Show **Verified** only when all three hashes match; otherwise show **Verification Failed**.
 
-An authenticated coordinator can select an audit record and recompute its canonical leaf and Merkle proof. A modified record must fail verification. The public page exposes proof data but not the private payload or nonce.
+The public view may show the audit ID, opaque case reference, event type, claimed time, ledger time, transaction hash, network, and verification result. It must not expose the nonce or any private payload fields. An authorized administrator or auditor may export the canonical payload and nonce to independently recompute the commitment.
+
+Use Stellar Testnet only, fund the audit account with Friendbot fake XLM, and add a startup guard that refuses Mainnet configuration. This makes the prototype network cost zero. Testnet history can be reset and is demonstration evidence, not permanent production infrastructure; Mainnet requires a separate cost and retention review.
 
 ## 11. Security and operational safeguards
 
 - Synthetic data only; display the warning before case creation.
 - Validate message length, identifiers, enums, quantities, and all AI output.
 - Allow only JPEG, PNG, and PDF attachments up to 5 MB.
-- Store attachments in a private bucket and generate short-lived signed download URLs.
+- Store attachments through a private S3-compatible adapter and generate short-lived signed download URLs.
 - Sanitize rendered Markdown and disallow raw HTML.
 - Apply a database-backed per-session message rate limit.
+- Store only the HMAC-SHA-256 hash of each reporter token, compare derived hashes in constant time, rotate tokens after privilege-relevant changes, and expire inactive sessions.
+- Check request `Origin` for cookie-authenticated mutations and set reporter and staff cookies `HttpOnly`, `SameSite=Lax`, and `Secure` outside local HTTP development.
 - Treat reporter text as untrusted data, not system instructions.
 - Do not expose tools to the public AI provider.
-- Keep all Supabase service, Stellar secret, and future watsonx credentials server-only.
+- Keep Neon database, Neon Auth, reporter-session, object-storage, Stellar, and future watsonx credentials server-only.
 - Do not expose the Ollama port to the internet.
 - Use structured logs containing IDs and safe error codes, not message bodies or secrets.
 - Add error boundaries and recoverable UI states for AI, database, storage, and Stellar failures.
@@ -714,9 +718,16 @@ An authenticated coordinator can select an audit record and recompute its canoni
 ```dotenv
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+DATABASE_URL=
+DATABASE_URL_UNPOOLED=
+NEON_AUTH_BASE_URL=
+NEON_AUTH_COOKIE_SECRET=
+REPORTER_SESSION_PEPPER=
+
+OBJECT_STORAGE_ENDPOINT=
+OBJECT_STORAGE_BUCKET=
+OBJECT_STORAGE_ACCESS_KEY=
+OBJECT_STORAGE_SECRET_KEY=
 
 AI_PROVIDER=ollama
 AI_BASE_URL=http://127.0.0.1:11434/v1
@@ -726,63 +737,90 @@ AI_MAX_OUTPUT_TOKENS=600
 AI_CONCURRENCY=1
 
 STELLAR_NETWORK=testnet
-STELLAR_RPC_URL=https://soroban-testnet.stellar.org
+STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
 STELLAR_NETWORK_PASSPHRASE="Test SDF Network ; September 2015"
-STELLAR_CONTRACT_ID=
 STELLAR_AUDIT_PUBLIC_KEY=
 STELLAR_AUDIT_SECRET_KEY=
 
 AUDIT_SCHEMA_VERSION=1
 ```
 
-Validate required values at server startup. Never prefix secrets with `NEXT_PUBLIC_`.
+Validate required values at server startup. Use `DATABASE_URL` for pooled application traffic and `DATABASE_URL_UNPOOLED` only for migrations or direct-connection operations. Require `NEON_AUTH_COOKIE_SECRET` and `REPORTER_SESSION_PEPPER` to contain at least 32 random bytes. Object-storage values are required only when the post-MVP attachment feature is enabled. Never prefix secrets with `NEXT_PUBLIC_`.
 
 ## 13. IBM Bob implementation phases
+
+The following roles are IBM Bob development-agent roles, not ReliefOps application roles.
+
+### Required manager-worker model
+
+#### Manager agent
+
+The manager is orchestration-only. It may read the selected phase, its required supporting specifications, and worker reports; break that phase into bounded tasks; delegate tasks; wait for results; and send targeted follow-ups. It must never create or edit files, write code or documentation, run commands, perform integration, fix failures, implement any part of the product, or delegate work that is not directly traceable to the active phase or gate.
+
+Whenever implementation, integration, documentation, repair, or verification is required, the manager must delegate it to a worker subagent. The manager may report a gate as passed only when a worker has run and reported every required command.
+
+#### Worker subagents
+
+Worker subagents perform all implementation and validation. Each delegation must state the exact scope, owned files or responsibility, dependencies, acceptance conditions, gate commands, and deferred work that is prohibited.
+
+Workers must preserve existing and concurrent changes, stay within their assigned ownership, map every changed file to an explicit requirement, implement only the required validation and error handling, run their checks, fix failures caused by their work, and remove unrequired additions before reporting exact files, commands, results, risks, and blockers. They stop after their assigned task and never advance the roadmap themselves.
+
+Only one designated worker may modify shared coordination surfaces such as `package.json`, migration ordering, or `docs/bob-development-log.md` during a phase. If parallel workers contribute, the manager delegates final integration and the complete phase gate to an integration worker; the manager never integrates or verifies directly.
+
+### Delegation protocol
+
+1. Select one phase only and respect its dependency order.
+2. Delegate the entire phase to one worker by default. Use multiple workers only for independent tasks with non-overlapping ownership.
+3. Give every worker the phase scope, file or responsibility ownership, every required supporting specification, acceptance conditions, required gate, and explicit instruction not to add unlisted features, infrastructure, abstractions, packages, or refactors. The worker must read each named supporting specification in full before editing.
+4. Delegate any failure back to the responsible worker; never repair it in the manager role.
+5. Delegate integration and the final gate to a worker, then stop after reporting the worker results.
+6. Do not delegate the next phase until a new request explicitly starts it.
 
 ### Phase 0: Project foundation
 
 - Initialize project context in IBM Bob.
 - Add repository instructions preserving this plan's scope and invariants.
 - Scaffold Next.js, TypeScript, Tailwind, linting, formatting, Vitest, and Playwright.
-- Create the Rust Soroban contract workspace.
 - Add typed environment validation and `.env.example`.
 - Create `docs/architecture.md` and `docs/bob-development-log.md`.
-- Add scripts for lint, typecheck, unit tests, end-to-end tests, build, and contract tests.
+- Add scripts for lint, typecheck, unit tests, end-to-end tests, and build.
 
 Gate:
 
 - Clean dependency installation succeeds.
 - Lint and typecheck succeed.
-- Empty unit and contract test suites execute.
+- The empty unit-test suite executes.
 - Production build succeeds.
 
-### Phase 1: Database, authentication, and RLS
+### Phase 1: Neon data, sessions, and staff authentication
 
-- Create enums, tables, constraints, indexes, and seed data.
-- Configure anonymous reporter authentication and staff magic-link login.
+- Create the Drizzle schema, migrations, enums, tables, constraints, indexes, and seed data.
+- Implement keyed-hash reporter sessions and staff login through Neon Auth.
 - Implement profiles and role-aware navigation.
-- Apply RLS policies and minimum grants.
+- Add server-only database access, minimum runtime-role grants, CSRF checks, and centralized authorization helpers.
 - Seed one administrator, one coordinator, two responders, and synthetic resources.
 
 Gate:
 
-- Reporter data is isolated by user.
+- Reporter data is isolated by a valid session cookie.
 - Responders see only their assigned tasks.
 - Coordinators cannot perform administrator operations.
-- The service-role key is absent from browser bundles.
+- Database and authentication secrets are absent from browser bundles.
 
 ### Phase 2: AI providers and intake chatbot
 
+- Before editing, read `docs/chatbot-specification.md` in full and treat it as the minimum chatbot behavior contract; full-roadmap additions must not weaken it.
 - Implement `ReliefAiProvider`, `MockAiProvider`, and `OllamaAiProvider`.
 - Add the single-concurrency queue and health check.
 - Add versioned prompts, schemas, JSON parsing, repair, and fallback behavior.
-- Build anonymous case creation, chat, structured fact extraction, reporter confirmation, and AI urgency suggestion.
+- Build first-message case creation with one pending `CHAT_STARTED` record, chat, structured fact extraction, reporter confirmation, analysis-only spelling normalization, deterministic capitalization cues, non-diagnostic possible-distress analysis, and AI urgency suggestion.
 - Add deterministic safety messaging and human-review fallback.
 
 Gate:
 
 - Mock and Ollama providers pass the same contract tests.
 - A complete synthetic case reaches human review.
+- Every synthetic acceptance scenario in `docs/chatbot-specification.md` passes.
 - Ollama outage preserves the report and activates deterministic fallback.
 - No public API response exposes internal prompts or secrets.
 
@@ -790,6 +828,7 @@ Gate:
 
 - Build the queue and case-detail interface.
 - Display the complete AI urgency breakdown.
+- Display communication cues separately from incident facts and urgency factors, using the exact non-diagnostic label and safeguards in `docs/chatbot-specification.md`.
 - Implement append-only human final urgency and revision history.
 - Add atomic takeover, transfer, coordinator messaging, private AI suggestions, and reviewed return to AI.
 
@@ -817,17 +856,17 @@ Gate:
 
 ### Phase 5: Audit records and Stellar
 
-- Insert audit records with each important domain operation.
-- Implement canonicalization, per-case hash chaining, Merkle roots, and proofs.
-- Build and test the Soroban contract.
-- Deploy it to Stellar Testnet and fund the account with Friendbot.
-- Implement transaction simulation, batch submission, reconciliation, retries, and verification pages.
+- Implement deterministic `CHAT_STARTED` canonicalization, nonce generation, and SHA-256 commitments.
+- Submit one immediate standard `Manage Data` operation per conversation session to Stellar Testnet and fund the signer with Friendbot.
+- Implement idempotent submission, reconciliation, retries, Horizon lookup, and the verification page.
+- Keep all other lifecycle history in append-only off-chain operational events.
 
 Gate:
 
-- Contract rejects unauthorized callers and incorrect previous roots.
-- No sensitive data appears in transaction parameters or events.
-- Altering a record fails proof verification.
+- Exactly one start audit exists per conversation and a retry cannot create a second record.
+- No sensitive data appears in the transaction operation.
+- The page displays both the claimed receive time and the ledger close time.
+- Altering the off-chain record fails hash verification.
 - Stellar downtime leaves operational work functional and visibly pending.
 
 ### Phase 6: Hardening and completion
@@ -841,7 +880,7 @@ Gate:
 
 Gate:
 
-- All unit, integration, contract, and end-to-end tests pass.
+- All unit, integration, and end-to-end tests pass.
 - Lint, typecheck, and production build pass.
 - Synthetic end-to-end workflow completes with Ollama and Stellar Testnet.
 - Repository contains no secrets or real personal information.
@@ -857,14 +896,15 @@ Gate:
 - Task DAG cycle detection
 - Deterministic responder ranking
 - Inventory reservation arithmetic
-- Canonical JSON stability
-- Leaf hashing, Merkle-root construction, and proof verification
+- `CHAT_STARTED` canonical JSON and salted-hash stability
+- Stellar `Manage Data` encoding, decoding, and verification
 - On-chain payload redaction
+- One-start-record-per-session uniqueness and retry idempotency
 
 ### Integration tests
 
-- RLS for reporter, coordinator, responder, and administrator
-- Anonymous case isolation
+- Reporter cookie isolation and staff role authorization
+- Missing, malformed, expired, and cross-session cookie rejection
 - Message idempotency
 - Mock and Ollama provider contracts
 - AI fallback intake
@@ -872,38 +912,30 @@ Gate:
 - Return-to-AI confirmation
 - Append-only urgency revisions
 - Transactional resource reservation
-- Audit-record creation with domain changes
+- Atomic first-message and pending-start-record creation
+- Append-only operational-event creation with domain changes
 - Failed and retried Stellar submissions
-
-### Soroban tests
-
-- Initialization only once
-- Admin authorization
-- Record-count bounds
-- Previous-root validation
-- Root and sequence updates
-- TTL extension
-- Expected contract event
 
 ### Playwright scenarios
 
-1. Reporter intake, AI suggestion, human urgency, plan approval, assignment, delivery, closure, and audit verification.
+1. First reporter message, immediate session-start anchor, AI suggestion, human urgency, plan approval, assignment, delivery, closure, and start-record verification.
 2. Reporter requests a human; coordinator takes over, replies, and returns control after confirming the summary.
 3. Two coordinators attempt takeover and only one succeeds.
 4. Ollama is unavailable and the case remains reviewable.
 5. Stellar is unavailable and operations continue with pending audit status.
-6. An anchored record is modified and verification fails.
+6. An anchored start record is modified and verification fails.
 7. Unauthorized users cannot access another case, task, conversation, attachment, or audit payload.
 
 ## 15. Definition of done
 
-The MVP is done only when:
+The full roadmap is done only when:
 
 - Every acceptance outcome is satisfied.
 - Every safety invariant is enforced in code and tested.
 - All validation commands pass from a clean checkout.
 - The application runs locally on the 16 GB demonstration computer with `granite4.1:3b`, 4K context, and one concurrent inference.
-- Supabase remains within its free tier and Stellar remains on Testnet.
+- Neon and any selected object-storage provider remain within the team's approved free tiers, and Stellar remains on Testnet.
 - The public repository contains no secrets or real sensitive data.
 - `docs/bob-development-log.md` accurately documents IBM Bob's implementation contribution.
 - The README reflects the implemented system rather than planned or aspirational features.
+- Every implementation change is traceable to an explicit roadmap requirement; no unapproved feature or infrastructure remains.

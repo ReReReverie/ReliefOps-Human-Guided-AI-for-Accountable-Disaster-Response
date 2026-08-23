@@ -16,9 +16,9 @@ ReliefOps is intended to enhance—not replace—existing emergency services suc
 
 ReliefOps combines a reporter chatbot with an operations dashboard. The chatbot gathers a report conversationally, asks focused follow-up questions, and maintains a structured case summary while preserving the complete transcript. IBM Granite analyzes known facts, identifies missing information, estimates how many people are affected, recommends an urgency level with supporting factors and confidence, and proposes a short task checklist.
 
-On the operations side, a coordinator reviews the analysis and records the authoritative final urgency. The coordinator can take over the conversation and speak directly with the reporter; automatic AI replies stop while the conversation is under human control. Approved decision snapshots are hashed off-chain and anchored on Stellar Testnet so later modifications can be detected without placing sensitive report content on the blockchain.
+On the operations side, a coordinator reviews the analysis and records the authoritative final urgency. The coordinator can take over the conversation and speak directly with the reporter; automatic AI replies stop while the conversation is under human control. When the first reporter message begins a conversation, ReliefOps creates one privacy-safe `CHAT_STARTED` record, stores it in Neon, and anchors only its salted hash on Stellar Testnet. This provides tamper-evident evidence that ReliefOps committed to the recorded start time without putting the message or reporter details on-chain.
 
-A real deployment could connect the same intake workflow to Messenger, WhatsApp, or SMS through channel adapters. The prototype uses a locally hosted web chatbot so the complete AI and human-handoff workflow can be demonstrated without depending on third-party messaging approval.
+A real deployment could connect the same intake workflow to Messenger, WhatsApp, or SMS through channel adapters. The prototype uses a web chatbot so the AI and human-handoff workflow can be demonstrated without depending on third-party messaging approval. Vercel hosts the public interface preview, while the real Granite workflow runs from the same repository on the demonstration computer because local Ollama is not reachable from a Vercel deployment.
 
 ## Selected challenge theme
 
@@ -39,44 +39,58 @@ Implementation will be performed inside IBM Bob one phase at a time. Each phase 
 - A coordinator can take over a chatbot conversation at any time.
 - The AI must not send messages while a human controls the conversation.
 - Messages, names, contacts, locations, explanations, and task details remain off-chain.
-- Stellar stores only a salted SHA-256 commitment to an approved decision snapshot.
+- Stellar stores only one salted SHA-256 `CHAT_STARTED` commitment per conversation session.
 - A failure in AI or Stellar must never discard or block a relief request.
 
 ## AI approach and architecture
 
 IBM Granite is used for bounded decision support rather than autonomous control. For each intake turn, it returns a schema-validated result containing the reporter-facing reply, extracted facts, missing fields, and—when sufficient evidence exists—an urgency suggestion and proposed tasks. Application code validates and stores these outputs; Granite cannot write the human final urgency, approve tasks, dispatch assistance, or close cases.
 
-The live AI runs locally through Ollama using `granite4.1:3b`. A deterministic mock provider uses the same schema so teammates and reviewers can exercise the workflow without running the model.
+The live AI runs locally through Ollama using `granite4.1:3b`. A deterministic mock provider uses the same schema so teammates can develop and test without running the model and so the Vercel deployment can provide a clearly labelled interface preview. The recorded prototype demonstration must use the real Ollama provider.
+
+The chatbot's prompts, allowed facts, output contract, urgency rubric, takeover rules, failure behavior, and synthetic acceptance scenarios are defined in [docs/chatbot-specification.md](docs/chatbot-specification.md). IBM Bob must implement that contract without expanding its scope.
 
 ```text
-Reporter browser ------+
-Coordinator dashboard -+--> Local Next.js application
-                                      |
-                                      +--> Supabase Free
-                                      |    Auth and Postgres
-                                      |
-                                      +--> Ollama on localhost
-                                      |    IBM Granite 4.1 3B
-                                      |
-                                      `--> Stellar Testnet
-                                           Manage Data hash anchor
+Public preview:
+
+Browser --> Vercel-hosted Next.js application
+                 |--> Neon Postgres + Neon Auth
+                 |--> Deterministic mock AI (clearly labelled)
+                 `--> Stellar Testnet
+
+Real-AI demonstration:
+
+Browser --> Local Next.js application
+                 |--> Neon Postgres + Neon Auth
+                 |--> Ollama on localhost --> IBM Granite 4.1 3B
+                 `--> Stellar Testnet --> CHAT_STARTED hash anchor
 ```
 
-The demonstration computer runs Next.js, Ollama, and the browser. Supabase stays in its free managed cloud service to avoid consuming the demonstration computer's RAM. Stellar uses Testnet and fake XLM from Friendbot.
+The demonstration computer runs Next.js, Ollama, and the browser. Neon remains in its free managed cloud service to avoid consuming the computer's RAM. Stellar uses Testnet and fake XLM from Friendbot. The browser must never call Ollama directly, and the Vercel deployment must never be configured with a localhost Ollama URL.
 
-## Zero-cost development stack
+## Technology stack
 
-| Component | Selection |
-| --- | --- |
-| Primary development tool | IBM Bob |
-| Web application | Next.js, TypeScript, Tailwind CSS |
-| Local AI runtime | Ollama |
-| AI model | `granite4.1:3b` |
-| Database and auth | Supabase Free |
-| Blockchain | Stellar Testnet standard transaction |
-| Source control | GitHub |
+| Layer | Technology | Purpose |
+| --- | --- | --- |
+| Primary development tool | IBM Bob | Manager-led development with worker subagents implementing and validating each phase |
+| Language and runtime | TypeScript and Node.js 22 LTS | Shared application and server runtime |
+| Package manager | pnpm | Reproducible dependency and script management |
+| Web framework | Next.js App Router and React | Reporter chatbot, coordinator dashboard, Server Components, Server Actions, and Route Handlers |
+| Styling | Tailwind CSS and small accessible components | Responsive user interface without a large component framework |
+| Public web hosting | Vercel Hobby | Hosted interface preview and normal Next.js server functions; it does not host Ollama |
+| Database | Neon Free Postgres | Cases, messages, AI assessments, human decisions, tasks, and audit records |
+| Database access | Drizzle ORM and migrations | Typed server-side queries and versioned schema changes |
+| Staff authentication | Neon Auth | Coordinator login |
+| Reporter access | Server-issued `HttpOnly` session cookie | Account-free reporter isolation using HMAC-hashed tokens |
+| Input and AI validation | Zod | Validation of forms, API input, environment variables, and model output |
+| Local AI runtime | Ollama | Runs the real AI locally without cloud credentials or inference fees |
+| AI model | IBM Granite `granite4.1:3b` | Fact extraction, missing-information questions, urgency suggestions, summaries, and task proposals |
+| Development/preview AI | Deterministic `MockAiProvider` | Predictable tests, teammate development, and clearly labelled Vercel preview behavior |
+| Blockchain | Stellar Testnet with `@stellar/stellar-sdk` | One standard `Manage Data` hash anchor for each conversation start |
+| Automated testing | Vitest and Playwright | Focused unit/integration coverage and one end-to-end workflow |
+| Source control and review | Public GitHub repository | Challenge submission, collaboration, and implementation history |
 
-No paid service is required for the MVP. Remain on free plans and never switch Stellar configuration to Mainnet.
+No paid service or watsonx.ai credential is required for the MVP. Use Vercel Hobby, Neon Free, local Ollama, and Stellar Testnet only. Never switch Stellar configuration to Mainnet.
 
 ## Ollama setup for the demonstration computer
 
@@ -176,7 +190,7 @@ ollama stop granite4.1:3b
 
 ## Memory guidance
 
-- Do not run a local Supabase Docker stack on the demonstration computer.
+- Do not run a local PostgreSQL stack on the demonstration computer; use managed Neon Free.
 - Keep Ollama concurrency at one.
 - Keep the context at 4K unless measurements prove 8K is safe.
 - Pass Granite confirmed case facts and only the latest eight messages instead of the full transcript.
@@ -185,14 +199,14 @@ ollama stop granite4.1:3b
 
 ## How IBM Bob was used
 
-This repository is currently in the planning stage, so no application implementation is claimed yet. IBM Bob is designated as the primary development tool and will be used to scaffold the application, implement each feature phase, generate and revise tests, diagnose validation failures, and document the completed work.
+This repository is currently in the planning stage, so no application implementation is claimed yet. IBM Bob is designated as the primary development tool. Its manager agent only decomposes and delegates work; worker subagents perform all scaffolding, implementation, testing, repairs, integration, and documentation under the implementation plan's strict scope lock.
 
 1. Open this repository in IBM Bob.
 2. Give Bob [docs/implementation-plan-lean-mvp.md](docs/implementation-plan-lean-mvp.md) as the authoritative MVP specification.
-3. Complete only one implementation phase at a time.
-4. Run the phase's required tests and validation gate.
-5. Record the Bob mode, prompt, changes, tests, and commit in `docs/bob-development-log.md`.
-6. Do not change the safety invariants or scope without updating the plan first.
+3. Instruct the manager to delegate only one implementation phase at a time and never edit files or run commands itself.
+4. Require worker subagents to implement the assigned phase and run its tests and validation gate.
+5. Record the Bob mode, manager prompt, worker delegations, changes, tests, and commit in `docs/bob-development-log.md`.
+6. Do not add unlisted features or change the safety invariants, architecture, or scope without updating and approving the plan first.
 
 Actual Bob prompts, modes, resulting changes, validation commands, and commits will be recorded in `docs/bob-development-log.md`. Before challenge submission, this section must be updated from planned usage to a concise account of the implementation work Bob actually completed.
 
@@ -202,5 +216,8 @@ Actual Bob prompts, modes, resulting changes, validation commands, and commits w
 - [IBM Granite documentation](https://www.ibm.com/granite/docs/)
 - [Ollama on Windows](https://docs.ollama.com/windows)
 - [Ollama memory and concurrency configuration](https://docs.ollama.com/faq)
-- [Supabase documentation](https://supabase.com/docs)
+- [Next.js documentation](https://nextjs.org/docs)
+- [Vercel Next.js documentation](https://vercel.com/docs/frameworks/full-stack/nextjs)
+- [Neon documentation](https://neon.com/docs)
+- [Drizzle ORM documentation](https://orm.drizzle.team/docs/overview)
 - [Stellar developer documentation](https://developers.stellar.org/)
