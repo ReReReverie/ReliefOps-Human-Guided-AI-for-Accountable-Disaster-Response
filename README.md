@@ -1,41 +1,65 @@
 # ReliefOps
 
-ReliefOps is a human-supervised disaster coordination prototype. A public chatbot gathers relief requests while an operations dashboard helps coordinators review AI suggestions, take over conversations, set final urgency, organize tasks, assign responders, and track delivery.
+ReliefOps is a human-supervised disaster coordination prototype. A public chatbot gathers relief requests while an operations dashboard helps coordinators review AI suggestions, take over conversations, set final urgency, organize tasks, and create an auditable decision record.
 
 The project is being built for the IBM AI Builders Wild Card Challenge. IBM Bob will be the primary development tool, IBM Granite will provide the core AI capability through Ollama, and Stellar Testnet will provide tamper-evident audit anchoring.
 
 > ReliefOps is a student proof of concept, not an emergency service. Use synthetic demonstration data only. Do not submit real personal, medical, or disaster-victim information.
 
+## Problem statement
+
+Emergency hotlines and disaster-response teams can receive incomplete, repetitive, and unstructured reports during high-pressure incidents. Operators must repeatedly read conversations, identify how many people are affected, extract hazards and vulnerabilities, find missing information, and determine which cases require attention first. This manual intake work consumes time and increases cognitive load when operators need clear, actionable information.
+
+ReliefOps is intended to enhance—not replace—existing emergency services such as 911. It reduces repetitive information-processing work while preserving human authority over priority, communication, and operational action.
+
+## Solution description
+
+ReliefOps combines a reporter chatbot with an operations dashboard. The chatbot gathers a report conversationally, asks focused follow-up questions, and maintains a structured case summary while preserving the complete transcript. IBM Granite analyzes known facts, identifies missing information, estimates how many people are affected, recommends an urgency level with supporting factors and confidence, and proposes a short task checklist.
+
+On the operations side, a coordinator reviews the analysis and records the authoritative final urgency. The coordinator can take over the conversation and speak directly with the reporter; automatic AI replies stop while the conversation is under human control. Approved decision snapshots are hashed off-chain and anchored on Stellar Testnet so later modifications can be detected without placing sensitive report content on the blockchain.
+
+A real deployment could connect the same intake workflow to Messenger, WhatsApp, or SMS through channel adapters. The prototype uses a locally hosted web chatbot so the complete AI and human-handoff workflow can be demonstrated without depending on third-party messaging approval.
+
+## Selected challenge theme
+
+**Wild Card Challenge — Build Intelligent Systems for the Future of Work**
+
+ReliefOps aligns with this theme by treating AI as a supervised operational collaborator. It transforms an unstructured conversation into decision support and an organized workflow, helping emergency-response personnel process reports faster while keeping consequential decisions under human control.
+
 ## Current status
 
-The repository is currently in the planning stage. The authoritative, implementation-ready specification is in [docs/implementation-plan.md](docs/implementation-plan.md).
+The repository is currently in the planning stage. Use [docs/implementation-plan-lean-mvp.md](docs/implementation-plan-lean-mvp.md) for the token-efficient IBM Bob build. The original [docs/implementation-plan.md](docs/implementation-plan.md) is preserved as the fuller post-MVP roadmap.
 
 Implementation will be performed inside IBM Bob one phase at a time. Each phase has a validation gate that must pass before the next phase starts.
 
 ## Core product rules
 
 - AI suggests urgency and explains its reasoning; a coordinator sets the final urgency.
-- AI proposes tasks and resource matches; a coordinator approves assignments and dispatch.
+- AI proposes a short task checklist; a coordinator edits and approves it.
 - A coordinator can take over a chatbot conversation at any time.
 - The AI must not send messages while a human controls the conversation.
-- Messages, names, locations, documents, and photos remain off-chain.
-- Stellar stores only compact Merkle-root commitments representing batches of audit records.
+- Messages, names, contacts, locations, explanations, and task details remain off-chain.
+- Stellar stores only a salted SHA-256 commitment to an approved decision snapshot.
 - A failure in AI or Stellar must never discard or block a relief request.
 
-## Planned architecture
+## AI approach and architecture
+
+IBM Granite is used for bounded decision support rather than autonomous control. For each intake turn, it returns a schema-validated result containing the reporter-facing reply, extracted facts, missing fields, and—when sufficient evidence exists—an urgency suggestion and proposed tasks. Application code validates and stores these outputs; Granite cannot write the human final urgency, approve tasks, dispatch assistance, or close cases.
+
+The live AI runs locally through Ollama using `granite4.1:3b`. A deterministic mock provider uses the same schema so teammates and reviewers can exercise the workflow without running the model.
 
 ```text
 Reporter browser ------+
 Coordinator dashboard -+--> Local Next.js application
-Responder portal ------+             |
+                                      |
                                       +--> Supabase Free
-                                      |    Auth, Postgres, Storage, Realtime
+                                      |    Auth and Postgres
                                       |
                                       +--> Ollama on localhost
                                       |    IBM Granite 4.1 3B
                                       |
-                                      +--> Stellar Testnet
-                                           Soroban audit contract
+                                      `--> Stellar Testnet
+                                           Manage Data hash anchor
 ```
 
 The demonstration computer runs Next.js, Ollama, and the browser. Supabase stays in its free managed cloud service to avoid consuming the demonstration computer's RAM. Stellar uses Testnet and fake XLM from Friendbot.
@@ -48,8 +72,8 @@ The demonstration computer runs Next.js, Ollama, and the browser. Supabase stays
 | Web application | Next.js, TypeScript, Tailwind CSS |
 | Local AI runtime | Ollama |
 | AI model | `granite4.1:3b` |
-| Database, auth, files | Supabase Free |
-| Blockchain | Stellar Testnet and Soroban |
+| Database and auth | Supabase Free |
+| Blockchain | Stellar Testnet standard transaction |
 | Source control | GitHub |
 
 No paid service is required for the MVP. Remain on free plans and never switch Stellar configuration to Mainnet.
@@ -155,20 +179,22 @@ ollama stop granite4.1:3b
 - Do not run a local Supabase Docker stack on the demonstration computer.
 - Keep Ollama concurrency at one.
 - Keep the context at 4K unless measurements prove 8K is safe.
-- Pass Granite a rolling case summary and the last 8-12 relevant messages instead of the full transcript.
+- Pass Granite confirmed case facts and only the latest eight messages instead of the full transcript.
 - Close unrelated memory-heavy applications before running the complete prototype.
 - If output quality is insufficient, evaluate a larger model only after the 3B workflow is stable.
 
-## IBM Bob development workflow
+## How IBM Bob was used
+
+This repository is currently in the planning stage, so no application implementation is claimed yet. IBM Bob is designated as the primary development tool and will be used to scaffold the application, implement each feature phase, generate and revise tests, diagnose validation failures, and document the completed work.
 
 1. Open this repository in IBM Bob.
-2. Give Bob [docs/implementation-plan.md](docs/implementation-plan.md) as the authoritative specification.
+2. Give Bob [docs/implementation-plan-lean-mvp.md](docs/implementation-plan-lean-mvp.md) as the authoritative MVP specification.
 3. Complete only one implementation phase at a time.
 4. Run the phase's required tests and validation gate.
 5. Record the Bob mode, prompt, changes, tests, and commit in `docs/bob-development-log.md`.
 6. Do not change the safety invariants or scope without updating the plan first.
 
-The completed challenge README will eventually include the final problem statement, solution, architecture, selected Wild Card theme, and documented evidence of how IBM Bob was used. Those claims must reflect work actually completed in Bob.
+Actual Bob prompts, modes, resulting changes, validation commands, and commits will be recorded in `docs/bob-development-log.md`. Before challenge submission, this section must be updated from planned usage to a concise account of the implementation work Bob actually completed.
 
 ## Useful documentation
 
