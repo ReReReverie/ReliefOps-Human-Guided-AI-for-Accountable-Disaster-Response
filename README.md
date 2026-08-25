@@ -28,9 +28,17 @@ ReliefOps aligns with this theme by treating AI as a supervised operational coll
 
 ## Current status
 
-The repository is currently in the planning stage. Use [docs/implementation-plan-lean-mvp.md](docs/implementation-plan-lean-mvp.md) for the token-efficient IBM Bob build. The original [docs/implementation-plan.md](docs/implementation-plan.md) is preserved as the fuller post-MVP roadmap.
+**Phases 1–6 are implemented.** The repository contains the lean MVP application and integration support for a Next.js 15 App Router project:
 
-Implementation will be performed inside IBM Bob one phase at a time. Each phase has a validation gate that must pass before the next phase starts.
+- **Next.js App Router** — reporter chatbot (`/report`), coordinator queue (`/ops`), case detail (`/ops/cases/[id]`), audit verification (`/verify/[auditId]`), and coordinator login (`/login`)
+- **Neon Postgres integration** — Drizzle schema and queries for case, message, task, urgency assessment, and audit records
+- **Neon Auth integration** — coordinator email/password login and reporter access through server-issued `HttpOnly` session cookies
+- **AI provider integration** — Ollama/Granite provider for the local demonstration and deterministic `MockAiProvider` (`AI_PROVIDER=mock`) for development without Ollama
+- **Stellar Testnet integration** — one `CHAT_STARTED` hash-anchor flow per conversation, public verification page, and coordinator retry flow
+
+Verified local checks: `pnpm lint`, `pnpm typecheck`, 123 unit/integration tests, and `pnpm build` pass. Playwright scenarios skipped because `DATABASE_URL` was unavailable; live integrations remain pending environment-specific verification.
+
+Use [docs/implementation-plan-lean-mvp.md](docs/implementation-plan-lean-mvp.md) for the full lean MVP specification. The original [docs/implementation-plan.md](docs/implementation-plan.md) is preserved as the fuller post-MVP roadmap.
 
 ## Core product rules
 
@@ -166,17 +174,32 @@ Mock responses must use the same validated schemas as real Granite responses. On
 
 ## Running locally
 
-Once IBM Bob completes the initial scaffold:
-
 ```powershell
 pnpm install
 Copy-Item .env.example .env.local
+# Edit .env.local and fill in:
+#   DATABASE_URL, DATABASE_URL_UNPOOLED  — your Neon Postgres connection strings
+#   NEON_AUTH_BASE_URL                   — your Neon Auth project URL
+#   NEON_AUTH_COOKIE_SECRET              — random string ≥32 chars
+#   REPORTER_SESSION_PEPPER              — random string ≥32 chars
+#   STELLAR_AUDIT_PUBLIC_KEY / _SECRET_KEY — from Stellar Testnet Friendbot
+#   AI_PROVIDER=mock                     — use mock AI; set to ollama + fill AI_* for real Granite
 pnpm dev
 ```
 
 Open `http://localhost:3000`.
 
-Before a live walkthrough, warm up Granite to avoid a slow first response:
+To run the full validation suite:
+
+```powershell
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm test:e2e    # requires running Next.js server on http://localhost:3000
+pnpm build
+```
+
+Before a live walkthrough with real Granite, warm up the model:
 
 ```powershell
 ollama run granite4.1:3b "Respond with exactly READY"
@@ -199,16 +222,13 @@ ollama stop granite4.1:3b
 
 ## How IBM Bob was used
 
-This repository is currently in the planning stage, so no application implementation is claimed yet. IBM Bob is designated as the primary development tool. Its manager agent only decomposes and delegates work; worker subagents perform all scaffolding, implementation, testing, repairs, integration, and documentation under the implementation plan's strict scope lock.
+GPT-5.6 Sol with Max reasoning created the implementation plans, lean MVP scope, chatbot contract, architecture, safety rules, and validation gates.
 
-1. Open this repository in IBM Bob.
-2. Give Bob [docs/implementation-plan-lean-mvp.md](docs/implementation-plan-lean-mvp.md) as the authoritative MVP specification.
-3. Instruct the manager to delegate only one implementation phase at a time and never edit files or run commands itself.
-4. Require worker subagents to implement the assigned phase and run its tests and validation gate.
-5. Record the Bob mode, manager prompt, worker delegations, changes, tests, and commit in `docs/bob-development-log.md`.
-6. Do not add unlisted features or change the safety invariants, architecture, or scope without updating and approving the plan first.
+IBM Bob was the primary implementation tool. Its manager delegated the six lean-MVP phases to worker subagents. The phase record in `docs/bob-development-log.md` contains Bob's reported worker assignments, implementation notes, commands, and validation results across the scaffold, Neon data/auth, Ollama/Granite chatbot, coordinator workflow, Stellar Testnet anchoring, and finalization. It is a record of reported work, not independent tool-level authorship proof.
 
-Actual Bob prompts, modes, resulting changes, validation commands, and commits will be recorded in `docs/bob-development-log.md`. Before challenge submission, this section must be updated from planned usage to a concise account of the implementation work Bob actually completed.
+After IBM Bob's 40 free tokens were exhausted, Codex with GPT-5.6 Luna Max workers was used only to update this README. Codex did not implement application features; those remained IBM Bob's work.
+
+The current validation status is summarized above; the Bob log retains the phase-level commands and reported results.
 
 ## Useful documentation
 

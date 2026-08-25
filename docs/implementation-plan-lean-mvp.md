@@ -2,9 +2,23 @@
 
 ## Status and purpose
 
-This is the token-efficient implementation copy of `docs/implementation-plan.md`. Use this plan as the IBM Bob build specification while development credits and team time are constrained. Treat the full plan as the post-MVP roadmap; do not implement its additional scope until this lean plan passes its definition of done.
+This is the token-efficient implementation and verification copy of `docs/implementation-plan.md`. It served as the IBM Bob build specification while development credits and team time were constrained. The phases are now implemented in the repository; treat the full plan as the post-MVP roadmap and keep its additional scope out while lean MVP verification is pending.
 
 The lean plan removes features that do not materially improve the core demonstration. It does not remove the human-safety rules, AI transparency, chat takeover, or blockchain privacy controls.
+
+### Implementation status (2026-08-26)
+
+The repository contains implementations for Phases 1–6. Implementation status is separate from verification status:
+
+| Area | Current status |
+| --- | --- |
+| Phase implementation | Phases 1–6 implemented across `src/`, `drizzle/`, `tests/`, and the IBM Bob development log. |
+| Offline checks | `pnpm lint`, `pnpm typecheck`, `pnpm test` (123 tests), and `pnpm build` pass. |
+| Playwright | `pnpm test:e2e` is present but currently skips all tests when `DATABASE_URL` is unavailable; this is not an end-to-end verification pass. |
+| Live integrations | Neon/Auth, local Ollama/Granite, and Stellar Testnet execution remain pending credential and runtime setup. |
+| Lean definition of done | Not fully verified yet; skipped Playwright tests and pending live integrations must not be reported as completed verification. |
+
+Do not rewrite phase requirements or add post-MVP scope to make the implementation appear more complete. Update this status only when the corresponding verification evidence exists.
 
 The three-minute video remains outside this plan.
 

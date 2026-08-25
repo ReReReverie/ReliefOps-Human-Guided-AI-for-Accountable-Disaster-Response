@@ -1,0 +1,10 @@
+onlyBuiltDependencies:
+  - core-js
+  - esbuild
+  - sharp
+  - unrs-resolver
+
+approvedBuilds:
+  - core-js@3.50.0
+  - esbuild@0.18.20
+  - esbuild@0.25.12
