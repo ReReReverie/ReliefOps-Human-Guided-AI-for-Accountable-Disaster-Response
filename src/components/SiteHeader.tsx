@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
-
+import { useEffect, useRef, useState, useCallback } from "react";
+import { ChatAuditDialog } from "@/features/cases/ChatAuditDialog";
 type NavigationItem = {
   href: string;
   label: string;
@@ -19,24 +19,76 @@ const navigationItems: NavigationItem[] = [
   {
     href: "/report",
     label: "Report Incident",
-    // Verification is the public follow-up to a submitted incident.
     isActive: (pathname) =>
       pathname === "/report" || pathname === "/verify" || pathname.startsWith("/verify/"),
   },
   {
     href: "/ops",
     label: "Operator Dashboard",
-    // Keep nested case pages in the dashboard section.
     isActive: (pathname) => pathname === "/ops" || pathname.startsWith("/ops/"),
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Extract case ID from /ops/cases/[id] pathname
+// ---------------------------------------------------------------------------
+function extractCaseId(pathname: string): string | null {
+  const m = pathname.match(/^\/ops\/cases\/([^/]+)$/);
+  return m ? (m[1] ?? null) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Minimal hook: load auditId + dbStatus for a case on demand
+// ---------------------------------------------------------------------------
+type AuditMeta = { auditId: string; dbStatus: string } | null;
+
+function useCaseAuditMeta(caseId: string | null): {
+  meta: AuditMeta;
+  loading: boolean;
+} {
+  const [meta, setMeta] = useState<AuditMeta>(null);
+  const [loading, setLoading] = useState(false);
+  const lastCaseId = useRef<string | null>(null);
+
+  const load = useCallback(async (id: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/audit/case/${id}`);
+      if (!res.ok) return;
+      const data = await res.json() as { auditId?: string; auditStatus?: string };
+      if (data.auditId) {
+        setMeta({ auditId: data.auditId, dbStatus: data.auditStatus ?? "PENDING" });
+      }
+    } catch {
+      // non-critical
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!caseId) { setMeta(null); return; }
+    if (caseId === lastCaseId.current) return;
+    lastCaseId.current = caseId;
+    setMeta(null);
+    load(caseId);
+  }, [caseId, load]);
+
+  return { meta, loading };
+}
+
+// ---------------------------------------------------------------------------
+// SiteHeader
+// ---------------------------------------------------------------------------
 
 export function SiteHeader() {
   const pathname = usePathname() ?? "/";
   const headerRef = useRef<HTMLElement>(null);
 
-  // Publish the header's rendered height as --site-header-h so pages
-  // (e.g. the Telegram-style report page) can subtract it from 100dvh.
+  const caseId = extractCaseId(pathname);
+  const { meta, loading } = useCaseAuditMeta(caseId);
+
+  // Publish --site-header-h for the Telegram chat page
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
@@ -51,6 +103,10 @@ export function SiteHeader() {
     return () => ro.disconnect();
   }, []);
 
+  // Number of nav columns: 3 always + 1 when Chat Audit is shown
+  const showAuditButton = Boolean(caseId);
+  const colCount = showAuditButton ? "sm:grid-cols-4" : "sm:grid-cols-3";
+
   return (
     <header ref={headerRef} className="border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
@@ -63,11 +119,10 @@ export function SiteHeader() {
 
         <nav
           aria-label="Primary navigation"
-          className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3 lg:w-auto"
+          className={`grid w-full grid-cols-1 gap-2 ${colCount} lg:w-auto`}
         >
           {navigationItems.map((item) => {
             const active = item.isActive(pathname);
-
             return (
               <Link
                 key={item.href}
@@ -83,6 +138,21 @@ export function SiteHeader() {
               </Link>
             );
           })}
+
+          {/* Chat Audit — only shown when on a case detail page */}
+          {showAuditButton && (
+            <div className="inline-flex min-h-11 items-center justify-center">
+              {loading && !meta ? (
+                <span className="text-xs text-gray-400 px-3">Loading…</span>
+              ) : (
+                <ChatAuditDialog
+                  auditId={meta?.auditId ?? null}
+                  initialDbStatus={meta?.dbStatus ?? "PENDING"}
+                  asNavButton
+                />
+              )}
+            </div>
+          )}
         </nav>
       </div>
     </header>

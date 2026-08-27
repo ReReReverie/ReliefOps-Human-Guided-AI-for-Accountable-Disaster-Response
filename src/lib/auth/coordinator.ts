@@ -125,12 +125,18 @@ function getDbProfileStore(): ProfileStore {
  */
 export async function requireCoordinatorSession(): Promise<CoordinatorAuthResult> {
   if (process.env["LOCAL_DEV"] === "true") {
-    const { getLocalSession, LOCAL_COORD_USER_ID } = await import(
-      "@/lib/auth/local"
-    );
-    const session = isLocalAuthBypassEnabled()
-      ? { userId: LOCAL_COORD_USER_ID }
-      : await getLocalSession();
+    // Full demo bypass: return a fixed identity immediately — no cookie, no DB lookup.
+    if (isLocalAuthBypassEnabled()) {
+      const { LOCAL_COORD_USER_ID } = await import("@/lib/auth/local");
+      return {
+        ok: true,
+        userId: LOCAL_COORD_USER_ID,
+        displayName: "Demo Manager",
+      };
+    }
+
+    const { getLocalSession } = await import("@/lib/auth/local");
+    const session = await getLocalSession();
     if (!session) return { ok: false, reason: "no_session" };
 
     const store = getDbProfileStore();

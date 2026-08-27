@@ -4,16 +4,22 @@
  *
  * Close Case button with guard enforcement (error shown if guard fails).
  * Set Case Status button (REVIEW → ACTIVE).
+ * Chat Audit button — opens accessible dialog with Stellar verification.
  */
 import { useTransition, useState } from "react";
 import { closeCase, setCaseStatus, type CaseStatus } from "./actions";
+import { ChatAuditDialog } from "./ChatAuditDialog";
 
 type Props = {
   caseId: string;
   currentStatus: string;
+  /** auditId of the CHAT_STARTED record — null when not yet created */
+  auditId?: string | null;
+  /** Current DB anchor status — used to label retry button */
+  auditDbStatus?: string;
 };
 
-export function CaseControls({ caseId, currentStatus }: Props) {
+export function CaseControls({ caseId, currentStatus, auditId, auditDbStatus }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +66,10 @@ export function CaseControls({ caseId, currentStatus }: Props) {
             Close Case
           </button>
         )}
+        <ChatAuditDialog
+          auditId={auditId ?? null}
+          initialDbStatus={auditDbStatus ?? "PENDING"}
+        />
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
     </div>

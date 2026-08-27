@@ -507,7 +507,12 @@ export default async function CaseDetailPage({
             <span className="font-medium text-gray-700">{caseRow.chatMode}</span>
           </div>
         </div>
-        <CaseControls caseId={caseRow.id} currentStatus={caseRow.status} />
+        <CaseControls
+          caseId={caseRow.id}
+          currentStatus={caseRow.status}
+          auditId={auditRecord?.auditId ?? null}
+          auditDbStatus={auditRecord?.status ?? "PENDING"}
+        />
       </div>
 
       {/* Section 1: Chat + controls */}
