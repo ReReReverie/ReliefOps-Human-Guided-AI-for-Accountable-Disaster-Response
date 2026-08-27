@@ -114,13 +114,27 @@ function getDbProfileStore(): ProfileStore {
 
 /**
  * Production coordinator guard.
- * Calls `getNeonAuth().getSession()` which reads from the Next.js request context
- * (headers/cookies set by the `authApiHandler`).
+ * When LOCAL_DEV=true uses the local HMAC session (src/lib/auth/local.ts).
+ * Otherwise calls `getNeonAuth().getSession()` which reads from the Next.js
+ * request context (headers/cookies set by the authApiHandler).
  *
  * Use this in server actions and server components.
  * Returns CoordinatorAuthResult.
  */
 export async function requireCoordinatorSession(): Promise<CoordinatorAuthResult> {
+  if (process.env["LOCAL_DEV"] === "true") {
+    const { getLocalSession } = await import("@/lib/auth/local");
+    const session = await getLocalSession();
+    if (!session) return { ok: false, reason: "no_session" };
+
+    const store = getDbProfileStore();
+    const profile = await store.getByUserId(session.userId);
+    if (!profile) return { ok: false, reason: "no_profile" };
+    if (profile.role !== "COORDINATOR") return { ok: false, reason: "wrong_role" };
+
+    return { ok: true, userId: session.userId, displayName: profile.displayName };
+  }
+
   // Lazy import to avoid importing getNeonAuth at build time when env vars may be absent
   const { getNeonAuth } = await import("@/lib/auth/neon");
   const auth = getNeonAuth();

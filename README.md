@@ -149,7 +149,7 @@ ollama ps
 
 ### 5. Application AI configuration
 
-After IBM Bob creates `.env.example`, copy it to `.env.local` and use:
+Configure the `.env.local` created in the setup steps below with:
 
 ```dotenv
 AI_PROVIDER=ollama
@@ -172,44 +172,77 @@ AI_PROVIDER=mock
 
 Mock responses must use the same validated schemas as real Granite responses. Only the demonstration computer needs the live Ollama integration.
 
-## Running locally
+## How to clone it to your device
+
+Prerequisites: Git, Node.js 22 LTS, and pnpm. If pnpm is not installed, enable the version bundled with Corepack:
 
 ```powershell
-pnpm install
-Copy-Item .env.example .env.local
-# Edit .env.local and fill in:
-#   DATABASE_URL, DATABASE_URL_UNPOOLED  — your Neon Postgres connection strings
-#   NEON_AUTH_BASE_URL                   — your Neon Auth project URL
-#   NEON_AUTH_COOKIE_SECRET              — random string ≥32 chars
-#   REPORTER_SESSION_PEPPER              — random string ≥32 chars
-#   STELLAR_AUDIT_PUBLIC_KEY / _SECRET_KEY — from Stellar Testnet Friendbot
-#   AI_PROVIDER=mock                     — use mock AI; set to ollama + fill AI_* for real Granite
-pnpm dev
+corepack enable
+corepack prepare pnpm@11.9.0 --activate
 ```
 
-Open `http://localhost:3000`.
+Clone the public repository and enter its directory:
 
-To run the full validation suite:
-
-```powershell
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm test:e2e    # requires running Next.js server on http://localhost:3000
-pnpm build
+```text
+git clone https://github.com/ReReReverie/ReliefOps-Human-Guided-AI-for-Accountable-Disaster-Response.git
+cd ReliefOps-Human-Guided-AI-for-Accountable-Disaster-Response
 ```
 
-Before a live walkthrough with real Granite, warm up the model:
+## After cloning it how to use it
 
-```powershell
-ollama run granite4.1:3b "Respond with exactly READY"
-```
+1. Install dependencies from the repository root:
 
-When finished, release the model's memory:
+   ```text
+   pnpm install
+   ```
 
-```powershell
-ollama stop granite4.1:3b
-```
+2. Create the local environment file. Use PowerShell on Windows:
+
+   ```powershell
+   Copy-Item .env.example .env.local
+   ```
+
+   Or use macOS/Linux:
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+   Edit `.env.local` and provide your own `DATABASE_URL`, `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET`, and `REPORTER_SESSION_PEPPER` values. Keep secrets out of Git; the two secret values must contain at least 32 random characters. Set `AI_PROVIDER=mock` for the default local preview.
+
+3. Create a Neon Postgres project and enable Neon Auth. Put the project URL and server-side credentials in `.env.local`. Do not expose these values in browser code or commit them.
+
+4. Apply the database schema through the Neon SQL Editor. Paste and execute the complete contents of [`drizzle/migrations/0001_initial.sql`](drizzle/migrations/0001_initial.sql). This repository contains the SQL migration artifact but no Drizzle migration journal or migration script, so do not rely on `drizzle-kit migrate` for this setup.
+
+5. Create the demonstration coordinator account in Neon Auth, then copy its `user_id`. From PowerShell in the repository root, seed the matching coordinator profile with process-level variables:
+
+   ```powershell
+   $env:DATABASE_URL = "<your pooled Neon connection string>"
+   $env:COORDINATOR_USER_ID = "<the Neon Auth user_id>"
+   $env:COORDINATOR_DISPLAY_NAME = "Demo Coordinator"
+   pnpm exec tsx drizzle/seed.ts
+   ```
+
+6. Mock AI is the default for a setup without live model credentials. Ollama and IBM Granite are needed only for the full local AI demonstration; follow the existing [Ollama setup for the demonstration computer](#ollama-setup-for-the-demonstration-computer) section instead of duplicating those instructions here. Stellar Testnet credentials are also needed only for the full blockchain-backed demonstration: generate a Stellar keypair, fund its public address with Friendbot, put only the secret key in `STELLAR_AUDIT_SECRET_KEY`, keep `STELLAR_NETWORK=testnet`, and note that `STELLAR_AUDIT_PUBLIC_KEY` is currently unused. Never use Mainnet.
+
+7. Start the application:
+
+   ```text
+   pnpm dev
+   ```
+
+   Open `http://localhost:3000`. Main routes are `/report` (reporter chatbot), `/login` (coordinator login), `/ops` (coordinator queue), `/ops/cases/[id]` (case detail), and `/verify/[auditId]` (audit verification).
+
+8. Run the verified offline checks:
+
+   ```text
+   pnpm lint
+   pnpm typecheck
+   pnpm test
+   pnpm build
+   ```
+
+   `pnpm test:e2e` requires a separately running `pnpm dev` server, process-level `DATABASE_URL`, and process-level `E2E_COORDINATOR_EMAIL` plus `E2E_COORDINATOR_PASSWORD` for coordinator scenarios in the shell that runs the test. Without those live settings, the Playwright scenarios skip.
 
 ## Memory guidance
 

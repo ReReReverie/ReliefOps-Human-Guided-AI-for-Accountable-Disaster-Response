@@ -241,18 +241,28 @@ export default function ReportPage() {
           </section>
         )}
 
-        {/* Loading state — initial load */}
+        {/* Loading skeleton — initial send (no messages yet) */}
         {state.phase === "loading" && (
-          <p role="status" aria-live="polite" className="text-sm text-gray-500 mb-4">
-            Sending…
-          </p>
+          <div role="status" aria-live="polite" aria-label="Sending message" className="mb-4 space-y-3">
+            <div className="flex flex-col items-end gap-1">
+              <div className="h-3 w-8 bg-gray-200 rounded animate-pulse" />
+              <div className="h-8 w-48 bg-blue-200 rounded animate-pulse" />
+            </div>
+            <div className="flex flex-col items-start gap-1">
+              <div className="h-3 w-20 bg-gray-200 rounded animate-pulse" />
+              <div className="h-10 w-64 bg-gray-100 border border-gray-200 rounded animate-pulse" />
+            </div>
+          </div>
         )}
 
-        {/* Loading state — subsequent message while in active/human_mode phase */}
+        {/* Loading skeleton — subsequent sends (appended below existing messages) */}
         {submitting && (state.phase === "active" || state.phase === "human_mode") && (
-          <p role="status" aria-live="polite" className="text-sm text-gray-500 mb-2">
-            Sending…
-          </p>
+          <div role="status" aria-live="polite" aria-label="Sending message" className="mb-2">
+            <div className="flex flex-col items-start gap-1">
+              <div className="h-3 w-20 bg-gray-200 rounded animate-pulse" />
+              <div className="h-8 w-56 bg-gray-100 border border-gray-200 rounded animate-pulse" />
+            </div>
+          </div>
         )}
 
         {/* Error state */}

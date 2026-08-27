@@ -6,16 +6,19 @@ This is the token-efficient implementation and verification copy of `docs/implem
 
 The lean plan removes features that do not materially improve the core demonstration. It does not remove the human-safety rules, AI transparency, chat takeover, or blockchain privacy controls.
 
-### Implementation status (2026-08-26)
+### Implementation status (2026-08-26, updated 2026-08-27)
 
 The repository contains implementations for Phases 1–6. Implementation status is separate from verification status:
 
 | Area | Current status |
 | --- | --- |
 | Phase implementation | Phases 1–6 implemented across `src/`, `drizzle/`, `tests/`, and the IBM Bob development log. |
-| Offline checks | `pnpm lint`, `pnpm typecheck`, `pnpm test` (123 tests), and `pnpm build` pass. |
+| Offline checks | `pnpm lint`, `pnpm typecheck`, `pnpm test` (155 tests), and `pnpm build` pass. |
 | Playwright | `pnpm test:e2e` is present but currently skips all tests when `DATABASE_URL` is unavailable; this is not an end-to-end verification pass. |
 | Live integrations | Neon/Auth, local Ollama/Granite, and Stellar Testnet execution remain pending credential and runtime setup. |
+| Phase 3 chatbot spec — Scenarios A–E | ✅ Implemented and tested. Fixtures D (correction) and E (prompt injection) added; dedicated test blocks for A, B, C, D, E added; all 155 tests pass. |
+| Phase 3 chatbot spec — mock case to REVIEW | ✅ Verified: Scenario A fixture reaches `REVIEW` with `CRITICAL` urgency and valid schema. |
+| Phase 3 chatbot spec — live Ollama case to REVIEW | ⏳ **Pending — requires a machine with Ollama running.** See Phase 3 gate note below. |
 | Lean definition of done | Not fully verified yet; skipped Playwright tests and pending live integrations must not be reported as completed verification. |
 
 Do not rewrite phase requirements or add post-MVP scope to make the implementation appear more complete. Update this status only when the corresponding verification evidence exists.
@@ -528,6 +531,27 @@ Gate: the seeded coordinator can enter `/ops`, reporter sessions cannot enter it
 - Build first-message case creation with one pending `CHAT_STARTED` record, chat, fact updates, analysis-only spelling normalization, deterministic capitalization cues, non-diagnostic possible-distress analysis, urgency suggestion, task proposal, and review transition.
 
 Gate: all synthetic scenarios in `docs/chatbot-specification.md` pass; raw messages remain unchanged; writing style alone cannot set or raise urgency; one mock case and one Ollama case reach `REVIEW`; and an Ollama outage preserves the case.
+
+**Gate verification status:**
+
+| Gate item | Status |
+| --- | --- |
+| All synthetic scenarios A–L pass (mock fixtures + unit tests) | ✅ 155 tests pass — see `tests/ai/scenarios.test.ts` |
+| Raw messages remain unchanged in transcript | ✅ Service saves reporter message before inference; no corrected-message column; fixtures assert `analysisNormalizationApplied` correctly |
+| Writing style alone cannot set or raise urgency | ✅ Scenario I (HELP → no CRITICAL), Scenario K (lowercase → CRITICAL from facts), Scenario J (caps are secondary cue only) all pass |
+| One mock case reaches `REVIEW` | ✅ Scenario A fixture: `readyForHumanReview=true`, urgency `CRITICAL`, schema valid, service transitions to `REVIEW` |
+| One Ollama case reaches `REVIEW` | ⏳ **Pending.** Ollama is not running in the current development environment. The teammate with a local Ollama installation must complete this step — see instructions below. |
+| Ollama outage preserves the case | ✅ Scenario G tests: `OllamaFailure` thrown after two invalid responses; deterministic `FAILURE_MESSAGE` returned; reporter message remains saved |
+
+**Ollama live-case verification — instructions for the teammate with Ollama:**
+
+1. Ensure `ollama serve` is running and `granite4.1:3b` is pulled (`ollama pull granite4.1:3b`).
+2. Set environment variables: `AI_PROVIDER=ollama`, `AI_BASE_URL=http://127.0.0.1:11434/v1`, and all required Neon/Auth variables from `.env.example`.
+3. Start the app: `pnpm dev`.
+4. Open `/report` in a browser and send: `Five people are trapped on the second floor of a building in Sector 7. Water is rapidly rising and one person is injured.`
+5. Confirm the response is a valid AI intake message (not the failure message), `readyForHumanReview=true` in the DB, and the case status moves to `REVIEW`.
+6. Open the ops dashboard and confirm the case appears under review with an AI Suggested Urgency of `CRITICAL`.
+7. Record the result in `docs/bob-development-log.md` under the Phase 3 audit entry — include the response text, urgency level, and whether the case reached `REVIEW`.
 
 ### Phase 4: Coordinator workflow
 

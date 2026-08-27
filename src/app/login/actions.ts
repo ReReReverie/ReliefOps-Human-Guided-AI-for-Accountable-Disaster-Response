@@ -2,12 +2,14 @@
 /**
  * src/app/login/actions.ts — Server Action for coordinator login.
  *
- * Uses Neon Auth signIn.email to authenticate the coordinator.
- * On success, the Neon Auth SDK sets the session cookie.
+ * LOCAL_DEV=true  → authenticates against LOCAL_COORDINATOR_EMAIL / PASSWORD
+ *                   env vars; sets a local HMAC session cookie.
+ * Otherwise       → uses Neon Auth signIn.email.
+ *
  * Returns { error } on failure — never exposes internal error details.
  */
 import { redirect } from "next/navigation";
-import { getNeonAuth } from "@/lib/auth/neon";
+import { cookies } from "next/headers";
 
 export async function loginAction(
   _prevState: { error?: string },
@@ -20,14 +22,32 @@ export async function loginAction(
     return { error: "Email and password are required." };
   }
 
+  if (process.env["LOCAL_DEV"] === "true") {
+    const { localSignIn, LOCAL_COORD_COOKIE } = await import(
+      "@/lib/auth/local"
+    );
+    const token = localSignIn(email, password);
+    if (!token) {
+      return { error: "Invalid email or password." };
+    }
+    const jar = await cookies();
+    jar.set(LOCAL_COORD_COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false, // localhost — no HTTPS required
+      maxAge: 12 * 60 * 60, // 12 hours
+      path: "/",
+    });
+    redirect("/ops");
+  }
+
+  const { getNeonAuth } = await import("@/lib/auth/neon");
   const auth = getNeonAuth();
   const { error } = await auth.signIn.email({ email, password });
 
   if (error) {
-    // Return a generic error — never expose internal details
     return { error: "Invalid email or password." };
   }
 
-  // Successful auth — redirect to coordinator queue
   redirect("/ops");
 }

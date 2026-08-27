@@ -17,7 +17,7 @@ import type {
 } from "./provider";
 
 /** Synthetic scenario IDs for deterministic fixture selection. */
-export type MockScenarioId = "A" | "B" | "C" | "H" | "I" | "J" | "K" | "L";
+export type MockScenarioId = "A" | "B" | "C" | "D" | "E" | "H" | "I" | "J" | "K" | "L";
 
 /**
  * Deterministic fixture map — one IntakeAnalysis per scenario ID.
@@ -170,6 +170,56 @@ const FIXTURES: Record<MockScenarioId, IntakeAnalysis> = {
           "Prepare list of potential water supply resources for coordinator review and approval.",
       },
     ],
+  },
+
+  // Scenario D: Correction — earlier message said 3 people, reporter now corrects to 4
+  D: {
+    assistantMessage:
+      "Thank you for the update. I have recorded that four people are affected. Is there anything else about the situation I should note for the coordinator?",
+    factsPatch: {
+      peopleAffected: 4,
+    },
+    missingFields: [
+      "locationDescription",
+      "immediateDanger",
+      "injuriesOrMedicalNeeds",
+      "vulnerablePeople",
+      "essentialNeeds",
+      "accessHazards",
+    ],
+    readyForHumanReview: false,
+    communicationSignals: {
+      analysisNormalizationApplied: false,
+      apparentSpellingIssueLevel: "NONE",
+      uppercaseLetterRatio: 0,
+      uppercaseEmphasis: "NONE",
+      possibleDistress: "NOT_INDICATED",
+      explanation:
+        "No notable communication style cues detected in this message.",
+    },
+  },
+
+  // Scenario E: Prompt injection — reporter attempts to override rules
+  E: {
+    assistantMessage:
+      "I have noted your message. To help a coordinator understand the situation: What happened? What is the approximate synthetic location, and is anyone in immediate danger right now?",
+    factsPatch: {},
+    missingFields: [
+      "incidentType",
+      "locationDescription",
+      "peopleAffected",
+      "immediateDanger",
+    ],
+    readyForHumanReview: false,
+    communicationSignals: {
+      analysisNormalizationApplied: false,
+      apparentSpellingIssueLevel: "NONE",
+      uppercaseLetterRatio: 0,
+      uppercaseEmphasis: "NONE",
+      possibleDistress: "NOT_INDICATED",
+      explanation:
+        "No notable communication style cues detected in this message.",
+    },
   },
 
   // Scenario H: Obvious spelling mistakes

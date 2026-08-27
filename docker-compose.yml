@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: reliefops_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: reliefops
+      POSTGRES_PASSWORD: reliefops_dev
+      POSTGRES_DB: reliefops
+    ports:
+      - "5432:5432"
+    volumes:
+      - reliefops_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reliefops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  reliefops_pgdata:

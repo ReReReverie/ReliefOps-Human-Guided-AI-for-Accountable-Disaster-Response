@@ -261,7 +261,7 @@ Route (app)                                 Size  First Load JS
 
 **Date:** 2025-08-25
 **Worker:** IBM Bob subagent (Phase 3 worker)
-**Status:** ✅ Gate passed
+**Status:** ✅ Gate passed (partial — live Ollama case pending; see audit supplement below)
 
 ---
 
@@ -281,13 +281,13 @@ The chatbot behavior contract defined in `docs/chatbot-specification.md` was imp
 | `src/features/ai/capitalization.ts` | `computeMessageStyle` — pure function computing deterministic `MessageStyleSignals` from raw text per spec §4 rules |
 | `src/features/ai/concurrency.ts` | `ConcurrencyLimiter` class — single-slot async mutex; `aiLimiter` module singleton |
 | `src/features/ai/ollama.ts` | `OllamaAiProvider` — direct HTTP fetch to Ollama, temperature 0, max 600 tokens, context 4096; system prompt (spec §9); one JSON repair attempt; `OllamaFailure` error type; capitalization override after validation |
-| `src/features/ai/mock.ts` | `MockAiProvider` with deterministic fixtures for Scenarios A, B, C, H, I, J, K, L; all fixtures pass `IntakeAnalysisSchema` |
+| `src/features/ai/mock.ts` | `MockAiProvider` with deterministic fixtures for Scenarios A, B, C, **D, E,** H, I, J, K, L; all fixtures pass `IntakeAnalysisSchema` |
 | `src/features/ai/index.ts` | `createAiProvider()` factory — returns `OllamaAiProvider` or `MockAiProvider` based on `AI_PROVIDER` env var |
 | `src/features/chat/service.ts` | `handleFirstMessage` (case + message + audit in one transaction, Stellar stub, then AI), `handleSubsequentMessage` (HUMAN mode guard, AI mode), `runAiAnalysis` (outside transaction), `loadCaseForReporter`, `FAILURE_MESSAGE` constant |
 | `src/app/api/chat/route.ts` | POST Route Handler: Origin check, Zod body validation, first/subsequent message dispatch, `HttpOnly` cookie setting |
 | `src/app/api/cases/[id]/route.ts` | GET Route Handler: session cookie check, constant-time ownership validation, case data response |
 | `src/app/report/page.tsx` | Functional reporter chat UI: synthetic-data warning, Simulated AI Preview label, case reference, message list, Request a Human button, HUMAN mode notice, plain-text rendering |
-| `tests/ai/scenarios.test.ts` | 61 tests covering Scenarios F–L, `computeMessageStyle` unit tests, `IntakeAnalysisSchema` unit tests, failure behavior unit tests |
+| `tests/ai/scenarios.test.ts` | 93 tests covering Scenarios A–L (dedicated `describe` blocks for A–E added), `computeMessageStyle` unit tests, `IntakeAnalysisSchema` unit tests, failure behavior unit tests |
 | `docs/bob-development-log.md` | This entry |
 
 ---
@@ -307,6 +307,8 @@ The chatbot behavior contract defined in `docs/chatbot-specification.md` was imp
 ✅ Pass
 
 #### `pnpm test`
+
+Original Phase 3 result:
 ```
  ✓ src/lib/env.test.ts (1 test) 2ms
  ✓ tests/auth/coordinator.test.ts (4 tests) 3ms
@@ -315,6 +317,21 @@ The chatbot behavior contract defined in `docs/chatbot-specification.md` was imp
  Test Files  4 passed (4)
        Tests  74 passed (74)
    Duration  7.99s
+```
+✅ Pass
+
+After Phase 3 audit supplement (2026-08-27):
+```
+ ✓ tests/cases/guards.test.ts (20 tests)
+ ✓ src/lib/env.test.ts (1 test)
+ ✓ tests/integration/append-only.test.ts (7 tests)
+ ✓ tests/auth/reporter.test.ts (8 tests)
+ ✓ tests/auth/coordinator.test.ts (4 tests)
+ ✓ tests/stellar/audit.test.ts (22 tests)
+ ✓ tests/ai/scenarios.test.ts (93 tests)
+ Test Files  7 passed (7)
+       Tests  155 passed (155)
+   Duration  1.75s
 ```
 ✅ Pass
 
@@ -351,7 +368,7 @@ Route (app)                                 Size  First Load JS
 | One JSON repair attempt then deterministic failure (spec §10, §11) | `src/features/ai/ollama.ts` — `_analyzeIntakeUnlimited` |
 | Provider rejects/overrides model-returned capitalization (spec §5) | `src/features/ai/ollama.ts` — `_parseAndValidate`; `src/features/ai/mock.ts` — `analyzeIntake` |
 | Deterministic failure message (spec §11) | `src/features/chat/service.ts` — `FAILURE_MESSAGE` |
-| Mock fixtures for Scenarios A, B, C, H, I, J, K, L (spec §12, §13) | `src/features/ai/mock.ts` — `FIXTURES` |
+| Mock fixtures for Scenarios A, B, C, D, E, H, I, J, K, L (spec §12, §13) | `src/features/ai/mock.ts` — `FIXTURES` |
 | `Simulated AI Preview` label when mock active (spec §12) | `src/app/report/page.tsx` |
 | First message: case + message + audit in one transaction (spec §3, plan §9) | `src/features/chat/service.ts` — `handleFirstMessage` |
 | Never hold DB transaction during inference (spec §10) | `src/features/chat/service.ts` — `runAiAnalysis` called after `db.transaction` completes |
@@ -391,7 +408,63 @@ Route (app)                                 Size  First Load JS
 
 ---
 
-*End of Phase 3 log entry.*
+*End of Phase 3 original log entry.*
+
+---
+
+### Phase 3 Audit Supplement
+
+**Date:** 2026-08-27
+**Worker:** IBM Bob
+**Trigger:** Full spec audit against all 12 scenarios (A–L) revealed that Scenarios D and E had no fixtures and no test coverage; Scenarios A, B, C had fixtures but no dedicated `describe` blocks.
+
+#### What was missing
+
+| Gap | Detail |
+|---|---|
+| Scenario D fixture | No fixture existed for the "correction" scenario (3 people → 4 people). `MockScenarioId` did not include `"D"`. |
+| Scenario E fixture | No fixture existed for the "prompt injection" scenario. `MockScenarioId` did not include `"E"`. |
+| Scenarios A, B, C tests | Fixtures existed but only appeared in the generic "all fixtures pass schema" sweep — no behavioral assertions per spec §13. |
+
+#### What was implemented
+
+| File | Change |
+|---|---|
+| `src/features/ai/mock.ts` | Added `"D"` and `"E"` to `MockScenarioId`; added Fixture D (`peopleAffected: 4`, no re-question, `readyForHumanReview: false`) and Fixture E (empty `factsPatch`, no urgency, no dispatch claim, no prompt reveal) |
+| `tests/ai/scenarios.test.ts` | Added dedicated `describe` blocks for Scenarios A, B, C, D, E; updated final fixture-all loop to include D and E; updated file header comment; test count: 61 → 93 |
+
+No existing code was modified. No new dependencies were added.
+
+#### Gate verification status
+
+| Gate item | Status |
+|---|---|
+| All synthetic scenarios A–L pass | ✅ 155 tests pass |
+| Raw messages remain unchanged in transcript | ✅ No corrected-message column; service saves before inference |
+| Writing style alone cannot set or raise urgency | ✅ Scenarios I, J, K pass |
+| One mock case reaches `REVIEW` | ✅ Scenario A: `readyForHumanReview=true`, urgency `CRITICAL`, schema valid |
+| One Ollama (live) case reaches `REVIEW` | ⏳ **Pending** — Ollama not available in this development environment |
+| Ollama outage preserves case | ✅ Scenario G tests pass |
+
+#### Live Ollama case — action required by teammate
+
+The gate requires one real Ollama inference to reach `REVIEW`. This machine does not have Ollama running. The teammate with a local Ollama setup must:
+
+1. Pull the model: `ollama pull granite4.1:3b`
+2. Start the server: `ollama serve`
+3. Configure `.env.local`: set `AI_PROVIDER=ollama` and all Neon/Auth variables from `.env.example`
+4. Run the app: `pnpm dev`
+5. Open `/report` and send the following message exactly:
+   > `Five people are trapped on the second floor of a building in Sector 7. Water is rapidly rising and one person is injured.`
+6. Confirm:
+   - The assistant message is a real AI intake response (not the failure message)
+   - The case status in the database is `REVIEW`
+   - The ops dashboard shows AI Suggested Urgency: `CRITICAL`
+7. Update this log entry — replace `⏳ Pending` above with `✅ Verified` and record the assistant response text, urgency level, and timestamp.
+
+---
+
+*End of Phase 3 audit supplement.*
 
 ---
 
