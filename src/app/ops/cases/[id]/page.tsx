@@ -1,7 +1,8 @@
 /**
  * /ops/cases/[id] — Case detail page.
  *
- * Protected: requires valid Neon Auth session + profiles.role = COORDINATOR.
+ * Protected in production. Local development may explicitly use the seeded
+ * coordinator identity without a login session.
  * Four sections (plan §9):
  *   1. Chat transcript + Take Over / Resume AI controls
  *   2. Confirmed facts + AI urgency breakdown + separately labelled communication cues
@@ -15,6 +16,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { requireCoordinatorSession } from "@/lib/auth/coordinator";
 import { getDb, schema } from "@/lib/db";
+import { isUuid } from "@/lib/ids";
 import { eq, desc } from "drizzle-orm";
 import { ChatControls } from "@/features/cases/ChatControls";
 import { UrgencyForm } from "@/features/cases/UrgencyForm";
@@ -467,6 +469,10 @@ export default async function CaseDetailPage({
   }
 
   const { id } = await params;
+  if (!isUuid(id)) {
+    notFound();
+  }
+
   const data = await loadCaseDetail(id);
   if (!data) {
     notFound();

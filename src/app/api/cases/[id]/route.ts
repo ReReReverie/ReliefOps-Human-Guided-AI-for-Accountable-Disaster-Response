@@ -10,6 +10,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { loadCaseForReporter, SESSION_COOKIE_NAME } from "@/features/chat/service";
+import { isUuid } from "@/lib/ids";
 
 export async function GET(
   request: NextRequest,
@@ -21,6 +22,10 @@ export async function GET(
   const rawToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!rawToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!isUuid(caseId)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   const result = await loadCaseForReporter(caseId, rawToken);

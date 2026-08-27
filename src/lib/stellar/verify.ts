@@ -7,6 +7,7 @@
 import { Horizon } from "@stellar/stellar-sdk";
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
+import { isUuid } from "@/lib/ids";
 import { computeRecordHash } from "@/lib/stellar/audit";
 import type { ChatStartedPayload } from "@/lib/stellar/audit";
 
@@ -32,6 +33,19 @@ export type VerificationResult = {
   /** Stellar TX hash */
   stellarTxHash: string | null;
 };
+
+function notFoundResult(auditId: string): VerificationResult {
+  return {
+    status: "NOT_FOUND",
+    auditId,
+    storedHash: null,
+    recomputedHash: null,
+    onChainHash: null,
+    firstMessageAt: null,
+    ledgerCloseTime: null,
+    stellarTxHash: null,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Horizon fetch
@@ -87,6 +101,10 @@ async function fetchOnChainHash(stellarTxHash: string): Promise<string | null> {
  * The public page receives only the VerificationResult (which omits nonce).
  */
 export async function verifyAuditRecord(auditId: string): Promise<VerificationResult> {
+  if (!isUuid(auditId)) {
+    return notFoundResult(auditId);
+  }
+
   const db = getDb();
 
   const record = await db.query.auditRecords.findFirst({
@@ -94,16 +112,7 @@ export async function verifyAuditRecord(auditId: string): Promise<VerificationRe
   });
 
   if (!record) {
-    return {
-      status: "NOT_FOUND",
-      auditId,
-      storedHash: null,
-      recomputedHash: null,
-      onChainHash: null,
-      firstMessageAt: null,
-      ledgerCloseTime: null,
-      stellarTxHash: null,
-    };
+    return notFoundResult(auditId);
   }
 
   if (record.status !== "ANCHORED" || !record.stellarTxHash) {

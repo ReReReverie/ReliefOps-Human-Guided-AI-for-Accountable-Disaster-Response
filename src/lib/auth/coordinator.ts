@@ -15,6 +15,7 @@
  */
 
 import { getDb, schema } from "@/lib/db";
+import { isLocalAuthBypassEnabled } from "@/lib/auth/local-config";
 import { eq } from "drizzle-orm";
 import type { Profile } from "@/lib/schema";
 
@@ -114,7 +115,8 @@ function getDbProfileStore(): ProfileStore {
 
 /**
  * Production coordinator guard.
- * When LOCAL_DEV=true uses the local HMAC session (src/lib/auth/local.ts).
+ * When LOCAL_DEV=true, uses the local coordinator identity. A local HMAC
+ * session is required unless LOCAL_AUTH_BYPASS=true is also explicitly set.
  * Otherwise calls `getNeonAuth().getSession()` which reads from the Next.js
  * request context (headers/cookies set by the authApiHandler).
  *
@@ -123,8 +125,12 @@ function getDbProfileStore(): ProfileStore {
  */
 export async function requireCoordinatorSession(): Promise<CoordinatorAuthResult> {
   if (process.env["LOCAL_DEV"] === "true") {
-    const { getLocalSession } = await import("@/lib/auth/local");
-    const session = await getLocalSession();
+    const { getLocalSession, LOCAL_COORD_USER_ID } = await import(
+      "@/lib/auth/local"
+    );
+    const session = isLocalAuthBypassEnabled()
+      ? { userId: LOCAL_COORD_USER_ID }
+      : await getLocalSession();
     if (!session) return { ok: false, reason: "no_session" };
 
     const store = getDbProfileStore();

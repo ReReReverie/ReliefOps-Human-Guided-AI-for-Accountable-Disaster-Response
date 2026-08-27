@@ -31,6 +31,7 @@ export function getDb(): AppDB {
       _db = drizzle(new Pool({ connectionString: url }), { schema }) as AppDB;
     } else {
       // Neon serverless websocket driver — required for Neon's connection pooler
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { Pool } = require("@neondatabase/serverless");
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { drizzle } = require("drizzle-orm/neon-serverless");

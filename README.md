@@ -231,7 +231,7 @@ cd ReliefOps-Human-Guided-AI-for-Accountable-Disaster-Response
    pnpm dev
    ```
 
-   Open `http://localhost:3000`. Main routes are `/report` (reporter chatbot), `/login` (coordinator login), `/ops` (coordinator queue), `/ops/cases/[id]` (case detail), and `/verify/[auditId]` (audit verification).
+   Open `http://localhost:3000`. Main routes are `/report` (reporter chatbot), `/login` (coordinator login), `/ops` (coordinator queue), `/ops/cases/[id]` (case detail), and `/verify/[auditId]` (audit verification). For a local-only demonstration without a login screen, set both `LOCAL_DEV=true` and `LOCAL_AUTH_BYPASS=true`; the bypass is disabled unless both switches are explicitly enabled and must never be enabled in a deployed environment.
 
 8. Run the verified offline checks:
 

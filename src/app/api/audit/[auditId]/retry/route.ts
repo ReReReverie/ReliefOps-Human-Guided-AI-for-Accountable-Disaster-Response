@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireCoordinatorSession } from "@/lib/auth/coordinator";
 import { anchorChatStarted } from "@/lib/stellar/audit";
 import { getDb, schema } from "@/lib/db";
+import { isUuid } from "@/lib/ids";
 import { eq } from "drizzle-orm";
 
 export async function POST(
@@ -21,6 +22,9 @@ export async function POST(
   }
 
   const { auditId } = await params;
+  if (!isUuid(auditId)) {
+    return NextResponse.json({ error: "Audit record not found" }, { status: 404 });
+  }
 
   // Load the record first to check it exists
   const db = getDb();

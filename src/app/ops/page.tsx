@@ -1,7 +1,8 @@
 /**
  * /ops — Case queue page.
  *
- * Protected: requires valid Neon Auth session + profiles.role = COORDINATOR.
+ * Protected in production. Local development may explicitly use the seeded
+ * coordinator identity without a login session.
  * Shows all relief cases with: reference, status, AI-suggested urgency,
  * human urgency, and age (created_at relative).
  *
