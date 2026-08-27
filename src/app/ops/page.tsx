@@ -4,7 +4,7 @@
  * Protected in production. Local development may explicitly use the seeded
  * coordinator identity without a login session.
  * Shows all relief cases with: reference, status, AI-suggested urgency,
- * human urgency, and age (created_at relative).
+ * human urgency, override control, and age (created_at relative).
  *
  * Server Component — data loaded here, no client state needed.
  */
@@ -13,6 +13,7 @@ import Link from "next/link";
 import { requireCoordinatorSession } from "@/lib/auth/coordinator";
 import { getDb, schema } from "@/lib/db";
 import { eq, desc } from "drizzle-orm";
+import { OverrideControl } from "@/features/cases/OverrideControl";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,7 @@ async function loadQueue() {
     id: c.id,
     publicRef: c.publicRef,
     status: c.status,
+    chatMode: c.chatMode as "AI" | "HUMAN",
     humanUrgency: c.humanUrgency,
     aiUrgency: latestAiUrgency.get(c.id) ?? null,
     createdAt: c.createdAt,
@@ -109,59 +111,74 @@ export default async function OpsPage() {
                   Human Final Urgency
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">
+                  Override
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-gray-600">
                   Age
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
-              {cases.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/ops/cases/${c.id}`}
-                      className="font-mono text-blue-600 hover:underline"
-                    >
-                      {c.publicRef}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLOR[c.status] ?? "bg-gray-100 text-gray-600"}`}
-                    >
-                      {c.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {c.aiUrgency ? (
-                      <span
-                        className={
-                          URGENCY_COLOR[c.aiUrgency] ?? "text-gray-600"
-                        }
-                      >
-                        {c.aiUrgency}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {c.humanUrgency ? (
-                      <span
-                        className={
-                          URGENCY_COLOR[c.humanUrgency] ?? "text-gray-600"
-                        }
-                      >
-                        {c.humanUrgency}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">
-                    {formatAge(c.createdAt)}
-                  </td>
-                </tr>
-              ))}
+              {cases.map((c) => {
+                const href = `/ops/cases/${c.id}`;
+                // Shared cell link: fills the entire cell so the whole row is clickable.
+                const cellClass = "block px-4 py-3 hover:bg-gray-50 cursor-pointer";
+                return (
+                  <tr key={c.id} className="hover:bg-gray-50 group">
+                    {/* Reference — original link kept for semantics */}
+                    <td className="p-0">
+                      <Link href={href} className={`${cellClass} font-mono text-blue-600 group-hover:underline`}>
+                        {c.publicRef}
+                      </Link>
+                    </td>
+                    <td className="p-0">
+                      <Link href={href} className={cellClass}>
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLOR[c.status] ?? "bg-gray-100 text-gray-600"}`}
+                        >
+                          {c.status}
+                        </span>
+                      </Link>
+                    </td>
+                    <td className="p-0">
+                      <Link href={href} className={cellClass}>
+                        {c.aiUrgency ? (
+                          <span className={URGENCY_COLOR[c.aiUrgency] ?? "text-gray-600"}>
+                            {c.aiUrgency}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </Link>
+                    </td>
+                    <td className="p-0">
+                      <Link href={href} className={cellClass}>
+                        {c.humanUrgency ? (
+                          <span className={URGENCY_COLOR[c.humanUrgency] ?? "text-gray-600"}>
+                            {c.humanUrgency}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </Link>
+                    </td>
+                    {/* Override cell: interactive button — does NOT navigate on click */}
+                    <td className="px-4 py-3">
+                      <OverrideControl
+                        caseId={c.id}
+                        chatMode={c.chatMode}
+                        isClosed={c.status === "CLOSED"}
+                        redirectOnOverride
+                      />
+                    </td>
+                    <td className="p-0">
+                      <Link href={href} className={`${cellClass} text-gray-500`}>
+                        {formatAge(c.createdAt)}
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

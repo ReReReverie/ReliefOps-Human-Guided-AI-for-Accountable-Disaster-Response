@@ -12,9 +12,11 @@
  *   - Shows "A human coordinator is handling this conversation" when in HUMAN mode.
  *   - Plain text only — never renders AI-provided HTML or Markdown.
  *   - Accessible: labels, keyboard navigation, focus management.
+ *
+ * UI style: Telegram-inspired dark chat shell.
  */
 
-import { useState, useRef, useEffect, FormEvent } from "react";
+import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,11 +53,20 @@ export default function ReportPage() {
   const [state, setState] = useState<ChatState>({ phase: "idle" });
   const [submitting, setSubmitting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [state]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  }, [inputValue]);
 
   async function submitMessage(e: FormEvent) {
     e.preventDefault();
@@ -89,9 +100,7 @@ export default function ReportPage() {
       setInputValue("");
 
       // Handle human mode response
-      if (
-        (data as { awaitingHuman?: boolean }).awaitingHuman === true
-      ) {
+      if ((data as { awaitingHuman?: boolean }).awaitingHuman === true) {
         setState((prev) => ({
           phase: "human_mode",
           messages:
@@ -153,8 +162,17 @@ export default function ReportPage() {
     }
   }
 
-  const isMock =
-    state.phase === "active" && state.aiProvider === "mock";
+  // Ctrl/Cmd+Enter to send, plain Enter inserts newline
+  function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      if (inputValue.trim() && !submitting) {
+        submitMessage(e as unknown as FormEvent);
+      }
+    }
+  }
+
+  const isMock = state.phase === "active" && state.aiProvider === "mock";
 
   const messages =
     state.phase === "active"
@@ -163,8 +181,7 @@ export default function ReportPage() {
       ? state.messages
       : [];
 
-  const chatMode =
-    state.phase === "active" ? state.chatMode : "AI";
+  const chatMode = state.phase === "active" ? state.chatMode : "AI";
 
   const publicRef =
     state.phase === "active"
@@ -173,172 +190,255 @@ export default function ReportPage() {
       ? state.publicRef
       : null;
 
-  return (
-    <main className="min-h-screen bg-white">
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        {/* Page header */}
-        <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-          Report an Incident
-        </h1>
+  const isActive =
+    state.phase === "active" || state.phase === "human_mode";
 
-        {/* Synthetic data + not-an-emergency-service warning */}
+  return (
+    /*
+     * Full-height dark shell — mirrors Telegram's layout:
+     *   chat header  (top bar with title + meta)
+     *   scrollable message feed
+     *   input bar (bottom)
+     *
+     * Uses 100dvh minus the site header height so the nav stays visible.
+     * The outer <main> in layout.tsx must stretch to fill the remaining
+     * viewport; we achieve this with the inline style on this element.
+     */
+    <div
+      style={{
+        background: "#17212b",
+        fontFamily: "'Segoe UI', system-ui, sans-serif",
+        height: "calc(100dvh - var(--site-header-h, 0px))",
+      }}
+      className="flex flex-col"
+    >
+      {/* ── Top bar ─────────────────────────────────────────────── */}
+      <header
+        style={{ background: "#232e3c", borderBottom: "1px solid #1a2535" }}
+        className="flex-none flex items-center gap-3 px-4 py-3 z-10"
+      >
+        {/* Avatar */}
         <div
-          role="alert"
-          aria-live="polite"
-          className="border border-amber-400 bg-amber-50 rounded p-3 mb-4 text-sm text-amber-900"
+          style={{ background: "#3e88c7", width: 40, height: 40 }}
+          className="rounded-full flex-none flex items-center justify-center text-white font-bold text-base select-none"
+          aria-hidden="true"
         >
-          <strong>⚠ This is a prototype using synthetic data only.</strong>{" "}
-          Do not submit real personal information. This is not an emergency
-          service. If you have a real emergency, call your local emergency
-          number immediately.
+          RO
         </div>
 
-        {/* Simulated AI Preview label */}
-        {isMock && (
-          <div
-            role="status"
-            className="border border-blue-300 bg-blue-50 rounded p-2 mb-4 text-sm text-blue-800"
-          >
-            <strong>Simulated AI Preview</strong> — responses are
-            pre-generated fixtures, not live AI output.
+        {/* Title + meta */}
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-white text-sm leading-tight truncate">
+            ReliefOps Incident Report
           </div>
-        )}
+          <div style={{ color: "#8e9aac" }} className="text-xs leading-tight mt-0.5">
+            {chatMode === "HUMAN"
+              ? "Human coordinator connected"
+              : isActive
+              ? "AI assistant active"
+              : "Start by describing the incident"}
+          </div>
+        </div>
 
-        {/* Public case reference */}
+        {/* Case ref pill */}
         {publicRef && (
-          <p className="text-sm text-gray-500 mb-4">
-            Case reference:{" "}
-            <span className="font-mono font-medium text-gray-700">
-              {publicRef}
-            </span>
-          </p>
-        )}
-
-        {/* Human mode notice */}
-        {chatMode === "HUMAN" && (
-          <div
-            role="status"
-            className="border border-green-300 bg-green-50 rounded p-3 mb-4 text-sm text-green-900"
+          <span
+            style={{ background: "#2b5278", color: "#8ec7f4" }}
+            className="flex-none text-xs font-mono px-2 py-0.5 rounded-full"
           >
-            A human coordinator is handling this conversation. Your messages
-            are saved and will be reviewed.
-          </div>
+            {publicRef}
+          </span>
         )}
+      </header>
 
-        {/* Message list */}
-        {messages.length > 0 && (
-          <section
-            aria-label="Conversation"
-            className="border border-gray-200 rounded mb-4 overflow-y-auto"
-            style={{ maxHeight: "400px" }}
-          >
-            <div className="p-4 space-y-3">
-              {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-          </section>
-        )}
+      {/* ── Warning banner (dismissible-feel, always visible) ───── */}
+      <div
+        role="alert"
+        aria-live="polite"
+        style={{ background: "#2a1f0d", borderBottom: "1px solid #4a3510", color: "#e0a94a" }}
+        className="flex-none px-4 py-2 text-xs"
+      >
+        <strong>⚠ Prototype — synthetic data only.</strong>{" "}
+        Not an emergency service. For real emergencies call your local number.
+      </div>
 
-        {/* Loading skeleton — initial send (no messages yet) */}
-        {state.phase === "loading" && (
-          <div role="status" aria-live="polite" aria-label="Sending message" className="mb-4 space-y-3">
-            <div className="flex flex-col items-end gap-1">
-              <div className="h-3 w-8 bg-gray-200 rounded animate-pulse" />
-              <div className="h-8 w-48 bg-blue-200 rounded animate-pulse" />
-            </div>
-            <div className="flex flex-col items-start gap-1">
-              <div className="h-3 w-20 bg-gray-200 rounded animate-pulse" />
-              <div className="h-10 w-64 bg-gray-100 border border-gray-200 rounded animate-pulse" />
-            </div>
-          </div>
-        )}
+      {/* Simulated AI banner */}
+      {isMock && (
+        <div
+          style={{ background: "#0e2236", borderBottom: "1px solid #1a3a56", color: "#6aabde" }}
+          className="flex-none px-4 py-2 text-xs"
+        >
+          <strong>Simulated AI Preview</strong> — responses are pre-generated fixtures.
+        </div>
+      )}
 
-        {/* Loading skeleton — subsequent sends (appended below existing messages) */}
-        {submitting && (state.phase === "active" || state.phase === "human_mode") && (
-          <div role="status" aria-live="polite" aria-label="Sending message" className="mb-2">
-            <div className="flex flex-col items-start gap-1">
-              <div className="h-3 w-20 bg-gray-200 rounded animate-pulse" />
-              <div className="h-8 w-56 bg-gray-100 border border-gray-200 rounded animate-pulse" />
-            </div>
-          </div>
-        )}
-
-        {/* Error state */}
-        {state.phase === "error" && (
-          <div
-            role="alert"
-            className="border border-red-300 bg-red-50 rounded p-3 mb-4 text-sm text-red-800"
-          >
-            {state.message}
-          </div>
-        )}
-
-        {/* Message input form */}
-        <form onSubmit={submitMessage} className="space-y-3">
-          <div>
-            <label
-              htmlFor="message-input"
-              className="block text-sm font-medium text-gray-700 mb-1"
+      {/* ── Message feed ────────────────────────────────────────── */}
+      <section
+        aria-label="Conversation"
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-1"
+        style={{ overscrollBehavior: "contain" }}
+      >
+        {/* Idle placeholder */}
+        {state.phase === "idle" && (
+          <div className="flex justify-center mt-8">
+            <div
+              style={{ background: "#232e3c", color: "#8e9aac" }}
+              className="text-xs px-4 py-2 rounded-full"
             >
-              {state.phase === "idle" || state.phase === "loading"
-                ? "Describe the situation"
-                : "Your message"}
-            </label>
+              Send your first message to open a case
+            </div>
+          </div>
+        )}
+
+        {/* Human-mode system notice */}
+        {chatMode === "HUMAN" && (
+          <div className="flex justify-center my-2">
+            <div
+              role="status"
+              style={{ background: "#162d1f", color: "#4caf7d", border: "1px solid #1e4a30" }}
+              className="text-xs px-4 py-2 rounded-full"
+            >
+              A human coordinator is now handling this conversation
+            </div>
+          </div>
+        )}
+
+        {/* Messages */}
+        {messages.map((msg) => (
+          <MessageBubble key={msg.id} message={msg} />
+        ))}
+
+        {/* Initial loading (no messages yet) */}
+        {state.phase === "loading" && (
+          <div className="space-y-2 mt-1">
+            {/* Sent bubble skeleton */}
+            <div className="flex justify-end">
+              <div
+                style={{ background: "#2b5278" }}
+                className="h-8 w-48 rounded-2xl rounded-tr-sm animate-pulse"
+              />
+            </div>
+            {/* Incoming typing indicator */}
+            <div className="flex justify-start items-end gap-2">
+              <div
+                style={{ background: "#3e88c7", color: "#fff", width: 28, height: 28 }}
+                className="rounded-full flex-none flex items-center justify-center text-xs font-bold"
+                aria-hidden="true"
+              >
+                AI
+              </div>
+              <TypingDots />
+            </div>
+          </div>
+        )}
+
+        {/* Subsequent send — typing dots */}
+        {submitting && isActive && (
+          <div className="flex justify-start items-end gap-2 mt-1">
+            <div
+              style={{ background: "#3e88c7", width: 28, height: 28 }}
+              className="rounded-full flex-none flex items-center justify-center text-xs font-bold text-white"
+              aria-hidden="true"
+            >
+              {chatMode === "HUMAN" ? "HC" : "AI"}
+            </div>
+            <TypingDots />
+          </div>
+        )}
+
+        {/* Error */}
+        {state.phase === "error" && (
+          <div className="flex justify-center my-2">
+            <div
+              role="alert"
+              style={{ background: "#2d1515", color: "#f07070", border: "1px solid #4d2020" }}
+              className="text-xs px-4 py-2 rounded-full max-w-xs text-center"
+            >
+              {state.message}
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </section>
+
+      {/* ── Input bar ───────────────────────────────────────────── */}
+      <div
+        style={{ background: "#232e3c", borderTop: "1px solid #1a2535" }}
+        className="flex-none px-3 py-3"
+      >
+        {/* Request a Human — appears above input when in AI mode and active */}
+        {state.phase === "active" && chatMode === "AI" && (
+          <div className="flex justify-center mb-2">
+            <button
+              type="button"
+              onClick={requestHuman}
+              disabled={submitting}
+              style={{ color: "#6aabde" }}
+              className="text-xs underline-offset-2 hover:underline disabled:opacity-50"
+            >
+              Request a human coordinator
+            </button>
+          </div>
+        )}
+
+        <form onSubmit={submitMessage} className="flex items-end gap-2">
+          {/* Textarea */}
+          <div className="flex-1 relative">
             <textarea
+              ref={textareaRef}
               id="message-input"
               name="body"
-              rows={3}
+              rows={1}
               maxLength={2000}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
               disabled={submitting}
               placeholder={
                 state.phase === "idle" || state.phase === "loading"
-                  ? "Describe what happened, where you are (synthetic location), and whether anyone is in immediate danger…"
-                  : "Type your message…"
+                  ? "Describe the incident…"
+                  : "Message…"
               }
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              aria-label="Message input"
               aria-required="true"
+              style={{
+                background: "#17212b",
+                color: "#e8f1f9",
+                border: "none",
+                outline: "none",
+                resize: "none",
+                lineHeight: "1.5",
+                fontSize: "14px",
+                overflowY: "hidden",
+              }}
+              className="w-full rounded-xl px-4 py-2.5 placeholder:text-gray-500 disabled:opacity-50"
             />
-            <p className="text-xs text-gray-400 mt-1 text-right">
-              {inputValue.length}/2000
-            </p>
           </div>
 
-          <div className="flex gap-3 items-center">
-            <button
-              type="submit"
-              disabled={submitting || !inputValue.trim()}
-              className="bg-blue-600 text-white text-sm font-medium px-4 py-2 rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? "Sending…" : "Send"}
-            </button>
-
-            {/* Request a Human button — only in AI mode after first message */}
-            {state.phase === "active" &&
-              state.chatMode === "AI" && (
-                <button
-                  type="button"
-                  onClick={requestHuman}
-                  disabled={submitting}
-                  className="border border-gray-300 text-gray-700 text-sm px-4 py-2 rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 disabled:opacity-50"
-                >
-                  Request a Human
-                </button>
-              )}
-          </div>
+          {/* Send button — paper plane */}
+          <button
+            type="submit"
+            disabled={submitting || !inputValue.trim()}
+            aria-label="Send message"
+            style={{
+              background: inputValue.trim() && !submitting ? "#3e88c7" : "#2b3f55",
+              width: 40,
+              height: 40,
+              flexShrink: 0,
+              transition: "background 0.15s",
+            }}
+            className="rounded-full flex items-center justify-center disabled:cursor-not-allowed"
+          >
+            <PaperPlaneIcon />
+          </button>
         </form>
 
-        {/* Privacy notice */}
-        <p className="mt-6 text-xs text-gray-400">
-          Do not enter real names, phone numbers, government identifiers,
-          medical records, or location coordinates. Use only synthetic or
-          fictional details.
+        <p style={{ color: "#4a5568" }} className="text-xs mt-1.5 text-right pr-12">
+          {inputValue.length > 0 ? `${inputValue.length}/2000` : "Ctrl+Enter to send"}
         </p>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -355,24 +455,151 @@ function MessageBubble({ message }: { message: MessageItem }) {
   else if (isAI) label = "ReliefOps AI";
   else label = "Human Coordinator";
 
+  // Format time if available
+  let timeStr = "";
+  if (message.createdAt) {
+    try {
+      const d = new Date(message.createdAt);
+      timeStr = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <article
       aria-label={`Message from ${label}`}
-      className={`flex flex-col ${isReporter ? "items-end" : "items-start"}`}
+      className={`flex items-end gap-2 ${isReporter ? "flex-row-reverse" : "flex-row"} mb-1`}
     >
-      <span className="text-xs text-gray-400 mb-1">{label}</span>
+      {/* Avatar — only for incoming */}
+      {!isReporter && (
+        <div
+          style={{
+            background: isAI ? "#3e88c7" : "#4caf7d",
+            width: 28,
+            height: 28,
+            flexShrink: 0,
+          }}
+          className="rounded-full flex items-center justify-center text-white text-xs font-bold self-end mb-0.5"
+          aria-hidden="true"
+        >
+          {isAI ? "AI" : "HC"}
+        </div>
+      )}
+
+      {/* Bubble */}
       <div
-        className={`max-w-prose text-sm rounded px-3 py-2 whitespace-pre-wrap break-words ${
-          isReporter
-            ? "bg-blue-600 text-white"
+        style={{
+          maxWidth: "75%",
+          background: isReporter
+            ? "#2b5278"                  // Telegram outgoing blue
             : isAI
-            ? "bg-gray-100 text-gray-900 border border-gray-200"
-            : "bg-green-100 text-green-900 border border-green-200"
-        }`}
+            ? "#182533"                  // Telegram incoming dark
+            : "#1a3326",                 // Coordinator green-dark
+          color: isReporter
+            ? "#e8f1f9"
+            : isAI
+            ? "#c8d8e8"
+            : "#7de8b0",
+          borderRadius: isReporter
+            ? "18px 18px 4px 18px"
+            : "18px 18px 18px 4px",
+        }}
+        className="px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
       >
-        {/* Plain text only — never render HTML */}
+        {/* Sender label for non-reporter */}
+        {!isReporter && (
+          <div
+            style={{ color: isAI ? "#6aabde" : "#4caf7d", fontSize: 11 }}
+            className="font-semibold mb-0.5"
+          >
+            {label}
+          </div>
+        )}
+
+        {/* Plain text body — never render HTML */}
         {message.body}
+
+        {/* Timestamp */}
+        {timeStr && (
+          <div
+            style={{ color: isReporter ? "#8ab8d8" : "#4a5e72", fontSize: 10 }}
+            className="text-right mt-1 select-none"
+          >
+            {timeStr}
+          </div>
+        )}
       </div>
     </article>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Typing dots indicator
+// ---------------------------------------------------------------------------
+
+function TypingDots() {
+  return (
+    <div
+      role="status"
+      aria-label="Waiting for response"
+      style={{
+        background: "#182533",
+        borderRadius: "18px 18px 18px 4px",
+      }}
+      className="flex items-center gap-1 px-4 py-3"
+    >
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "#4a7a9b",
+            display: "inline-block",
+            animation: `tg-dot-bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes tg-dot-bounce {
+          0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
+          40% { transform: scale(1); opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Paper plane SVG icon
+// ---------------------------------------------------------------------------
+
+function PaperPlaneIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      style={{ color: "#e8f1f9", transform: "rotate(45deg)", marginLeft: 2 }}
+    >
+      <path
+        d="M22 2L11 13"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M22 2L15 22L11 13L2 9L22 2Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

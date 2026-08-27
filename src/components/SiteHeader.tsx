@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 
 type NavigationItem = {
   href: string;
@@ -32,9 +33,26 @@ const navigationItems: NavigationItem[] = [
 
 export function SiteHeader() {
   const pathname = usePathname() ?? "/";
+  const headerRef = useRef<HTMLElement>(null);
+
+  // Publish the header's rendered height as --site-header-h so pages
+  // (e.g. the Telegram-style report page) can subtract it from 100dvh.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty(
+        "--site-header-h",
+        el.offsetHeight + "px"
+      );
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   return (
-    <header className="border-b border-gray-200 bg-white">
+    <header ref={headerRef} className="border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-lg font-semibold tracking-tight text-gray-900">

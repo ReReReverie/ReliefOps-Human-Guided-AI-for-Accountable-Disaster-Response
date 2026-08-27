@@ -3,30 +3,26 @@
  * src/features/cases/ChatControls.tsx — Chat section client controls.
  *
  * Renders:
- *   - Take Over button (when chatMode = 'AI')
+ *   - OverrideControl (orange `!` when chatMode = 'AI'; active badge when HUMAN)
  *   - Resume AI button (when chatMode = 'HUMAN')
  *   - Coordinator reply textarea + Send button (HUMAN mode only)
  *
  * Plan §9 / spec §3.
  */
 import { useTransition, useState } from "react";
-import { takeOverChat, resumeAi, sendCoordinatorReply } from "./actions";
+import { resumeAi, sendCoordinatorReply } from "./actions";
+import { OverrideControl } from "./OverrideControl";
 
 type Props = {
   caseId: string;
   chatMode: "AI" | "HUMAN";
+  isClosed?: boolean;
 };
 
-export function ChatControls({ caseId, chatMode }: Props) {
+export function ChatControls({ caseId, chatMode, isClosed }: Props) {
   const [isPending, startTransition] = useTransition();
   const [replyBody, setReplyBody] = useState("");
   const [replyError, setReplyError] = useState<string | null>(null);
-
-  function handleTakeOver() {
-    startTransition(async () => {
-      await takeOverChat(caseId);
-    });
-  }
 
   function handleResumeAi() {
     startTransition(async () => {
@@ -50,15 +46,11 @@ export function ChatControls({ caseId, chatMode }: Props) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
-        {chatMode === "AI" ? (
-          <button
-            onClick={handleTakeOver}
-            disabled={isPending}
-            className="px-3 py-1.5 text-sm bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50"
-          >
-            Take Over
-          </button>
-        ) : (
+        {/* Override control: orange ! button (AI) or active badge (HUMAN) */}
+        <OverrideControl caseId={caseId} chatMode={chatMode} isClosed={isClosed} />
+
+        {/* Resume AI button — only in HUMAN mode */}
+        {chatMode === "HUMAN" && (
           <button
             onClick={handleResumeAi}
             disabled={isPending}
@@ -67,9 +59,10 @@ export function ChatControls({ caseId, chatMode }: Props) {
             Resume AI
           </button>
         )}
+
         <span className="text-sm text-gray-500">
           Chat mode:{" "}
-          <span className={chatMode === "HUMAN" ? "font-semibold text-amber-700" : "font-semibold text-blue-700"}>
+          <span className={chatMode === "HUMAN" ? "font-semibold text-orange-700" : "font-semibold text-blue-700"}>
             {chatMode}
           </span>
         </span>

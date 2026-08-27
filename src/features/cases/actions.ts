@@ -44,15 +44,34 @@ async function getAuthenticatedCoordinator(): Promise<{
 
 /**
  * Set relief_cases.chatMode = 'HUMAN' for the given case.
+ *
+ * Guards:
+ *   - Requires coordinator authentication.
+ *   - Case must exist.
+ *   - Closed cases cannot be taken over.
+ *   - Already-HUMAN cases are treated as idempotent success.
+ * Revalidates both /ops and the case detail page.
  */
 export async function takeOverChat(caseId: string): Promise<void> {
   await getAuthenticatedCoordinator();
   const db = getDb();
-  await db
-    .update(schema.reliefCases)
-    .set({ chatMode: "HUMAN", updatedAt: new Date() })
-    .where(eq(schema.reliefCases.id, caseId));
+
+  const caseRow = await db.query.reliefCases.findFirst({
+    where: eq(schema.reliefCases.id, caseId),
+  });
+  if (!caseRow) throw new Error("Case not found.");
+  if (caseRow.status === "CLOSED") throw new Error("Cannot override a closed case.");
+
+  // Idempotent: already HUMAN is fine
+  if (caseRow.chatMode !== "HUMAN") {
+    await db
+      .update(schema.reliefCases)
+      .set({ chatMode: "HUMAN", updatedAt: new Date() })
+      .where(eq(schema.reliefCases.id, caseId));
+  }
+
   revalidatePath(`/ops/cases/${caseId}`);
+  revalidatePath("/ops");
 }
 
 // ---------------------------------------------------------------------------
@@ -132,10 +151,6 @@ export async function setHumanUrgency(
   reason: string
 ): Promise<void> {
   const coordinator = await getAuthenticatedCoordinator();
-
-  if (!reason || reason.trim().length === 0) {
-    throw new Error("A reason is required for human urgency assessment.");
-  }
 
   const db = getDb();
 

@@ -90,13 +90,27 @@ function closeCaseGuard(
 }
 
 // ---------------------------------------------------------------------------
-// Guard: setHumanUrgency — reason required
+// Guard: takeOverChat — case must exist, not closed, idempotent on HUMAN
 // ---------------------------------------------------------------------------
 
-function setHumanUrgencyGuard(reason: string): void {
-  if (!reason || reason.trim().length === 0) {
-    throw new Error("A reason is required for human urgency assessment.");
-  }
+type CaseLike = {
+  status: string;
+  chatMode: "AI" | "HUMAN";
+};
+
+function takeOverChatGuard(caseRow: CaseLike | null): "noop" | "update" {
+  if (!caseRow) throw new Error("Case not found.");
+  if (caseRow.status === "CLOSED") throw new Error("Cannot override a closed case.");
+  if (caseRow.chatMode === "HUMAN") return "noop"; // idempotent
+  return "update";
+}
+
+// ---------------------------------------------------------------------------
+// Guard: setHumanUrgency — reason is now optional (no guard needed)
+// ---------------------------------------------------------------------------
+
+function setHumanUrgencyGuard(_reason: string): void {
+  // Reason is optional — no validation required.
 }
 
 // ---------------------------------------------------------------------------
@@ -224,17 +238,43 @@ describe("closeCase guards", () => {
   });
 });
 
-describe("setHumanUrgency — reason required", () => {
-  it("throws when reason is empty", () => {
-    expect(() => setHumanUrgencyGuard("")).toThrowError(
-      "A reason is required for human urgency assessment."
-    );
+describe("takeOverChat guards", () => {
+  it("throws when case is not found", () => {
+    expect(() => takeOverChatGuard(null)).toThrowError("Case not found.");
   });
 
-  it("throws when reason is whitespace only", () => {
-    expect(() => setHumanUrgencyGuard("   ")).toThrowError(
-      "A reason is required for human urgency assessment."
-    );
+  it("throws when case is CLOSED", () => {
+    expect(() =>
+      takeOverChatGuard({ status: "CLOSED", chatMode: "AI" })
+    ).toThrowError("Cannot override a closed case.");
+  });
+
+  it("returns noop when case is already HUMAN (idempotent)", () => {
+    expect(
+      takeOverChatGuard({ status: "ACTIVE", chatMode: "HUMAN" })
+    ).toBe("noop");
+  });
+
+  it("returns update when case is AI-controlled", () => {
+    expect(
+      takeOverChatGuard({ status: "ACTIVE", chatMode: "AI" })
+    ).toBe("update");
+  });
+
+  it("returns update for AI-controlled INTAKE case", () => {
+    expect(
+      takeOverChatGuard({ status: "INTAKE", chatMode: "AI" })
+    ).toBe("update");
+  });
+});
+
+describe("setHumanUrgency — reason is optional", () => {
+  it("passes when reason is empty", () => {
+    expect(() => setHumanUrgencyGuard("")).not.toThrow();
+  });
+
+  it("passes when reason is whitespace only", () => {
+    expect(() => setHumanUrgencyGuard("   ")).not.toThrow();
   });
 
   it("passes when reason is provided", () => {

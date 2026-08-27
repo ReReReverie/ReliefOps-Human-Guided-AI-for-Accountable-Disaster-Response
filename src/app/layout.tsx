@@ -19,7 +19,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-white text-gray-900 antialiased">
         <WarningBanner />
         <SiteHeader />
-        <main>{children}</main>
+        <main className="overflow-hidden">{children}</main>
       </body>
     </html>
   );

@@ -42,10 +42,6 @@ export function UrgencyForm({ caseId, aiSuggestedLevel, currentHumanUrgency }: P
       setError("Please select an urgency level.");
       return;
     }
-    if (!reason.trim()) {
-      setError("A reason is required.");
-      return;
-    }
     setError(null);
     startTransition(async () => {
       try {
@@ -115,7 +111,7 @@ export function UrgencyForm({ caseId, aiSuggestedLevel, currentHumanUrgency }: P
               htmlFor={`reason-${caseId}`}
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Reason{selected && selected !== aiSuggestedLevel ? " (required — differs from AI)" : " (required)"}
+              Reason <span className="text-gray-400 font-normal">(optional)</span>
             </label>
             <textarea
               id={`reason-${caseId}`}
@@ -131,7 +127,7 @@ export function UrgencyForm({ caseId, aiSuggestedLevel, currentHumanUrgency }: P
 
           <button
             onClick={handleSubmit}
-            disabled={isPending || !selected || !reason.trim()}
+            disabled={isPending || !selected}
             className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
           >
             {isPending ? "Submitting…" : "Submit Urgency"}

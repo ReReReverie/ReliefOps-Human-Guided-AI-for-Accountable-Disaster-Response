@@ -535,10 +535,11 @@ export default async function CaseDetailPage({
           )}
         </div>
 
-        {/* Take Over / Resume AI / Reply controls */}
+        {/* Override / Resume AI / Reply controls */}
         <ChatControls
           caseId={caseRow.id}
           chatMode={caseRow.chatMode as "AI" | "HUMAN"}
+          isClosed={caseRow.status === "CLOSED"}
         />
       </Section>
 

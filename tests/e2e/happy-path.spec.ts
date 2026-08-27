@@ -125,9 +125,9 @@ test.describe("Happy-path demonstration", () => {
       page.locator("text=Human Final Urgency recorded")
     ).toBeVisible({ timeout: 10_000 });
 
-    // 5. Take over chat
-    const takeOverBtn = page.locator("button").filter({ hasText: "Take Over" });
-    await takeOverBtn.click();
+    // 5. Override AI and take human control
+    const overrideBtn = page.locator('button[aria-label="Override AI and take human control"]');
+    await overrideBtn.click();
     await expect(
       page.locator("text=HUMAN")
     ).toBeVisible({ timeout: 10_000 });

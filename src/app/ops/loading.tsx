@@ -21,6 +21,10 @@ function SkeletonRow() {
       <td className="px-4 py-3">
         <div className="h-4 w-14 bg-gray-100 rounded animate-pulse" />
       </td>
+      {/* Override */}
+      <td className="px-4 py-3">
+        <div className="h-7 w-7 bg-orange-100 rounded animate-pulse" />
+      </td>
       {/* Age */}
       <td className="px-4 py-3">
         <div className="h-4 w-12 bg-gray-100 rounded animate-pulse" />
@@ -43,7 +47,7 @@ export default function OpsLoading() {
         <table className="min-w-full text-sm divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {["Reference", "Status", "AI Suggested Urgency", "Human Final Urgency", "Age"].map(
+              {["Reference", "Status", "AI Suggested Urgency", "Human Final Urgency", "Override", "Age"].map(
                 (col) => (
                   <th key={col} className="px-4 py-3 text-left">
                     <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
