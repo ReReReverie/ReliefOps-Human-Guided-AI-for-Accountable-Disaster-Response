@@ -7,8 +7,13 @@
 import { describe, it, expect } from "vitest";
 import {
   generateSessionToken,
+  generateWorkspaceToken,
   hashSessionToken,
+  hashWorkspaceToken,
+  isAllowedReporterOrigin,
+  reporterSessionExpiresAt,
   verifySessionToken,
+  verifyWorkspaceToken,
   constantTimeEqual,
 } from "@/lib/auth/reporter";
 
@@ -97,5 +102,44 @@ describe("reporter session — negative isolation tests", () => {
 
   it("constantTimeEqual returns false for different hex strings of the same length", () => {
     expect(constantTimeEqual("deadbeef", "cafebabe")).toBe(false);
+  });
+
+  it("workspace tokens are domain-separated from legacy case tokens", () => {
+    const token = generateWorkspaceToken();
+    expect(token).toMatch(/^[0-9a-f]{64}$/);
+    expect(hashWorkspaceToken(PEPPER, token)).not.toBe(
+      hashSessionToken(PEPPER, token)
+    );
+    expect(
+      verifyWorkspaceToken(PEPPER, token, hashWorkspaceToken(PEPPER, token))
+    ).toBe(true);
+    expect(
+      verifyWorkspaceToken(PEPPER, generateWorkspaceToken(), hashWorkspaceToken(PEPPER, token))
+    ).toBe(false);
+  });
+
+  it("workspace expiry is absolute and exactly ten hours after creation", () => {
+    const startedAt = new Date("2026-01-01T00:00:00.000Z");
+    expect(reporterSessionExpiresAt(startedAt).toISOString()).toBe(
+      "2026-01-01T10:00:00.000Z"
+    );
+  });
+
+  it("normalizes Origin checks without allowing a different port or host", () => {
+    expect(
+      isAllowedReporterOrigin(
+        "https://relief.example.test",
+        "https://relief.example.test/"
+      )
+    ).toBe(true);
+    expect(
+      isAllowedReporterOrigin(
+        "https://attacker.example.test",
+        "https://relief.example.test"
+      )
+    ).toBe(false);
+    expect(isAllowedReporterOrigin(null, "https://relief.example.test")).toBe(
+      true
+    );
   });
 });

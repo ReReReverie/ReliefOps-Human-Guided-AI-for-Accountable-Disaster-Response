@@ -14,6 +14,8 @@
 import { useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 import { takeOverChat } from "./actions";
+import { AlertTriangle } from "lucide-react";
+import { Alert, Badge, Button } from "@/components/ui";
 
 type Props = {
   caseId: string;
@@ -35,19 +37,15 @@ export function OverrideControl({ caseId, chatMode, isClosed, redirectOnOverride
   // HUMAN mode: show active badge
   if (chatMode === "HUMAN") {
     return (
-      <span
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-300"
-        aria-label="Human control active"
-      >
-        <span aria-hidden="true">!</span>
-        {" Human control"}
-      </span>
+      <Badge tone="success" icon={AlertTriangle} className="whitespace-nowrap" aria-label="Human control active">
+        Human control
+      </Badge>
     );
   }
 
   // Closed: no control
   if (isClosed) {
-    return <span className="text-gray-400 text-sm select-none">—</span>;
+    return <span className="text-sm text-slate-500 select-none">Not available</span>;
   }
 
   function handleOverride() {
@@ -66,20 +64,22 @@ export function OverrideControl({ caseId, chatMode, isClosed, redirectOnOverride
 
   return (
     <span className="inline-flex flex-col items-start gap-1">
-      <button
+      <Button
+        type="button"
         onClick={handleOverride}
         disabled={isPending}
         aria-label="Override AI and take human control"
         aria-busy={isPending}
         title="Override AI and take human control"
-        className="w-7 h-7 flex items-center justify-center rounded font-bold text-base bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+        size="sm"
+        variant="warning"
+        className="min-h-11 min-w-11 px-2 text-base"
       >
-        !
-      </button>
+        <AlertTriangle aria-hidden="true" size={17} />
+        <span className="sr-only">Override</span>
+      </Button>
       {error && (
-        <span role="alert" className="text-xs text-red-600 max-w-[12rem]">
-          {error}
-        </span>
+        <Alert tone="danger" role="alert" className="max-w-[12rem] px-2 py-1 text-xs">{error}</Alert>
       )}
     </span>
   );

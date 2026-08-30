@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+coverage
+test-results
+playwright-report
+playwright/.cache
+.git
+.gitignore
+.env
+.env.*
+*.log
+qa-*.png
+*.tsbuildinfo

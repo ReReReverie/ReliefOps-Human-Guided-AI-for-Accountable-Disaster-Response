@@ -1,21 +1,79 @@
+x-postgres-env: &postgres-env
+  POSTGRES_USER: ${POSTGRES_USER:-reliefops}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reliefops_dev}
+  POSTGRES_DB: ${POSTGRES_DB:-reliefops}
+
 services:
   db:
     image: postgres:16-alpine
     container_name: reliefops_db
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: reliefops
-      POSTGRES_PASSWORD: reliefops_dev
-      POSTGRES_DB: reliefops
+    environment: *postgres-env
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - reliefops_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U reliefops"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 5s
+
+  migrate:
+    image: postgres:16-alpine
+    container_name: reliefops_migrate
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-reliefops}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-reliefops_dev}
+      PGDATABASE: ${POSTGRES_DB:-reliefops}
+    volumes:
+      - ./drizzle/migrations:/migrations:ro
+      - ./docker/migrate.sh:/usr/local/bin/reliefops-migrate:ro
+    # Invoke through sh because Windows bind mounts do not preserve the
+    # executable bit on this checked-in helper script.
+    entrypoint: ["sh", "/usr/local/bin/reliefops-migrate"]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reliefops_app
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-reliefops}:${POSTGRES_PASSWORD:-reliefops_dev}@db:5432/${POSTGRES_DB:-reliefops}
+      DATABASE_URL_UNPOOLED: postgresql://${POSTGRES_USER:-reliefops}:${POSTGRES_PASSWORD:-reliefops_dev}@db:5432/${POSTGRES_DB:-reliefops}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
 volumes:
   reliefops_pgdata:
+    name: reliefops_pgdata

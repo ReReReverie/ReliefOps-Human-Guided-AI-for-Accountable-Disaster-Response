@@ -1,1 +1,211 @@
 @import "tailwindcss";
+
+/*
+ * daisyUI v5 is intentionally configured through Tailwind v4's CSS-first
+ * plugin API. The custom themes are scoped to #ops-root so the coordinator
+ * preference can never repaint the reporter's Telegram shell or public pages.
+ */
+@plugin "daisyui" {
+  themes: false;
+  exclude: select;
+}
+
+@plugin "daisyui/theme" {
+  name: "emergency-light";
+  default: true;
+  color-scheme: light;
+  root: "#ops-root";
+  --color-base-100: oklch(99% 0.002 250);
+  --color-base-200: oklch(96.5% 0.008 250);
+  --color-base-300: oklch(91.5% 0.015 250);
+  --color-base-content: oklch(22% 0.025 255);
+  --color-primary: oklch(48% 0.18 255);
+  --color-primary-content: oklch(99% 0.002 250);
+  --color-secondary: oklch(45% 0.08 190);
+  --color-secondary-content: oklch(99% 0.002 250);
+  --color-accent: oklch(72% 0.14 75);
+  --color-accent-content: oklch(22% 0.025 255);
+  --color-neutral: oklch(28% 0.025 255);
+  --color-neutral-content: oklch(98% 0.004 250);
+  --color-info: oklch(54% 0.17 245);
+  --color-info-content: oklch(99% 0.002 250);
+  --color-success: oklch(53% 0.15 155);
+  --color-success-content: oklch(99% 0.002 250);
+  --color-warning: oklch(72% 0.16 75);
+  --color-warning-content: oklch(23% 0.045 75);
+  --color-error: oklch(52% 0.2 25);
+  --color-error-content: oklch(99% 0.002 250);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@plugin "daisyui/theme" {
+  name: "emergency-dark";
+  color-scheme: dark;
+  root: "#ops-root";
+  --color-base-100: oklch(20% 0.025 255);
+  --color-base-200: oklch(16.5% 0.022 255);
+  --color-base-300: oklch(26% 0.03 255);
+  --color-base-content: oklch(93% 0.01 250);
+  --color-primary: oklch(71% 0.15 235);
+  --color-primary-content: oklch(19% 0.03 255);
+  --color-secondary: oklch(70% 0.11 190);
+  --color-secondary-content: oklch(19% 0.03 255);
+  --color-accent: oklch(79% 0.14 80);
+  --color-accent-content: oklch(21% 0.04 80);
+  --color-neutral: oklch(29% 0.03 255);
+  --color-neutral-content: oklch(95% 0.01 250);
+  --color-info: oklch(73% 0.13 240);
+  --color-info-content: oklch(18% 0.03 255);
+  --color-success: oklch(73% 0.13 155);
+  --color-success-content: oklch(18% 0.03 255);
+  --color-warning: oklch(80% 0.14 80);
+  --color-warning-content: oklch(22% 0.04 80);
+  --color-error: oklch(72% 0.17 25);
+  --color-error-content: oklch(19% 0.03 255);
+  --radius-selector: 0.5rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+@theme {
+  --font-sans: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+:root {
+  --page-ink: #172033;
+  --page-muted: #5c687b;
+  --page-border: #dbe2eb;
+  --page-surface: #ffffff;
+  --page-canvas: #f4f7fa;
+}
+
+* {
+  border-color: var(--page-border);
+}
+
+html {
+  background: var(--page-canvas);
+}
+
+body {
+  min-width: 320px;
+  background: var(--page-canvas);
+  color: var(--page-ink);
+  font-family: var(--font-sans);
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* Coordinator theme surface. All operations pages live inside this scope. */
+#ops-root {
+  min-height: calc(100vh - var(--site-header-h, 0px));
+  background: var(--color-base-200, #f4f7fa);
+  color: var(--color-base-content, var(--page-ink));
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+#ops-root[data-theme="emergency-light"] {
+  --ops-canvas: #f4f7fa;
+  --ops-surface: #ffffff;
+  --ops-surface-muted: #eef3f8;
+  --ops-border: #dbe2eb;
+  --ops-ink: #172033;
+  --ops-muted: #5c687b;
+}
+
+#ops-root[data-theme="emergency-dark"] {
+  --ops-canvas: #111a29;
+  --ops-surface: #1a2638;
+  --ops-surface-muted: #202f43;
+  --ops-border: #33445c;
+  --ops-ink: #eef4fc;
+  --ops-muted: #a7b5c9;
+}
+
+#ops-root .ops-surface {
+  background: var(--ops-surface);
+  border-color: var(--ops-border);
+  color: var(--ops-ink);
+}
+
+#ops-root .ops-surface-muted {
+  background: var(--ops-surface-muted);
+  border-color: var(--ops-border);
+  color: var(--ops-ink);
+}
+
+#ops-root .ops-muted {
+  color: var(--ops-muted);
+}
+
+#ops-root .ops-border {
+  border-color: var(--ops-border);
+}
+
+html[data-ops-theme="emergency-dark"] .ops-header-scope {
+  border-color: #33445c;
+  background: #172337;
+  color: #eef4fc;
+}
+
+html[data-ops-theme="emergency-dark"] .ops-header-scope .ops-brand-muted,
+html[data-ops-theme="emergency-dark"] .ops-header-scope .ops-nav-inactive {
+  color: #a7b5c9;
+}
+
+html[data-ops-theme="emergency-dark"] .ops-header-scope .ops-nav-inactive {
+  border-color: #465b77;
+  background: #202f43;
+}
+
+html[data-ops-theme="emergency-dark"] .ops-header-scope .ops-nav-inactive:hover {
+  border-color: #7694bc;
+  background: #2c3c52;
+  color: #ffffff;
+}
+
+html[data-ops-theme="emergency-dark"] .ops-header-scope .ops-audit-placeholder {
+  border-color: #465b77;
+  color: #a7b5c9;
+}
+
+html[data-ops-theme="emergency-dark"] .ops-header-scope .ops-theme-toggle {
+  border-color: #465b77;
+  background: #202f43;
+  color: #eef4fc;
+}
+
+html[data-ops-theme="emergency-dark"] .ops-header-scope .ops-theme-toggle:hover {
+  background: #2c3c52;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

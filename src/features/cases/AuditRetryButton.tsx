@@ -8,6 +8,7 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Alert, Button } from "@/components/ui";
 
 export function AuditRetryButton({ auditId }: { auditId: string }) {
   const [loading, setLoading] = useState(false);
@@ -33,15 +34,17 @@ export function AuditRetryButton({ auditId }: { auditId: string }) {
   }
 
   return (
-    <div className="mt-1 space-y-1">
-      <button
+    <div className="mt-2 space-y-2">
+      <Button
+        type="button"
         onClick={handleRetry}
         disabled={loading}
-        className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+        size="sm"
+        variant="warning"
       >
         {loading ? "Retrying…" : "Retry Stellar Anchor"}
-      </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      </Button>
+      {error && <Alert tone="danger" role="alert" className="px-2 py-1 text-xs">{error}</Alert>}
     </div>
   );
 }

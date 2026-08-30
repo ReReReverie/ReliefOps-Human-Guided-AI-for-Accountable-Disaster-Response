@@ -13,10 +13,14 @@
  */
 import { randomBytes, randomUUID } from "crypto";
 import { nanoid } from "nanoid";
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 
 import { getDb, schema } from "@/lib/db";
-import { hashSessionToken, verifySessionToken } from "@/lib/auth/reporter";
+import {
+  hashSessionToken,
+  reporterSessionExpiresAt,
+  verifySessionToken,
+} from "@/lib/auth/reporter";
 import {
   computeMessageStyle,
   createAiProvider,
@@ -63,6 +67,18 @@ export type ChatResult = {
 export type HumanModeResult = {
   saved: true;
   awaitingHuman: true;
+  /** Included for workspace-aware continuation; optional for legacy callers. */
+  caseId?: string;
+  publicRef?: string;
+  status?: string;
+  chatMode?: string;
+};
+
+export type FirstMessageOptions = {
+  /** Workspace membership proven by the route handler. */
+  workspaceId?: string;
+  /** Must be the workspace's existing absolute deadline when provided. */
+  sessionExpiresAt?: Date;
 };
 
 
@@ -77,7 +93,8 @@ export type HumanModeResult = {
  */
 export async function handleFirstMessage(
   body: string,
-  serverReceiveTime: Date
+  serverReceiveTime: Date,
+  options: FirstMessageOptions = {}
 ): Promise<ChatResult> {
   const db = getDb();
   const pepper = process.env["REPORTER_SESSION_PEPPER"]!;
@@ -105,6 +122,9 @@ export async function handleFirstMessage(
         publicRef,
         sessionTokenHash: tokenHash,
         sessionStartedAt: serverReceiveTime,
+        reporterWorkspaceId: options.workspaceId ?? null,
+        reporterSessionExpiresAt:
+          options.sessionExpiresAt ?? reporterSessionExpiresAt(serverReceiveTime),
         status: "INTAKE",
         chatMode: "AI",
         facts: {},
@@ -192,21 +212,87 @@ export async function handleSubsequentMessage(
     throw new Error("SESSION_NOT_FOUND");
   }
 
+  if (caseRow.reporterSessionExpiresAt.getTime() <= Date.now()) {
+    throw new Error("SESSION_EXPIRED");
+  }
+
   // Constant-time compare to prevent timing attacks
   if (!verifySessionToken(pepper, rawToken, caseRow.sessionTokenHash)) {
     throw new Error("SESSION_MISMATCH");
   }
 
-  // Save reporter message before any AI call (spec §3)
-  await db.insert(schema.messages).values({
-    caseId: caseRow.id,
-    senderType: "REPORTER",
-    body,
+  return processSubsequentMessage(caseRow, body);
+}
+
+/**
+ * Continue a case selected from reporter history. The route must resolve the
+ * workspace cookie first; this function still checks membership in the same
+ * query so a guessed UUID or another workspace can never be mutated.
+ */
+export async function handleWorkspaceMessage(
+  body: string,
+  caseId: string,
+  workspaceId: string,
+  now = new Date()
+): Promise<ChatResult | HumanModeResult> {
+  const db = getDb();
+  const caseRow = await db.query.reliefCases.findFirst({
+    where: (c, { and, eq, gt }) =>
+      and(
+        eq(c.id, caseId),
+        eq(c.reporterWorkspaceId, workspaceId),
+        gt(c.reporterSessionExpiresAt, now)
+      ),
+  });
+  if (!caseRow) throw new Error("WORKSPACE_CASE_NOT_FOUND");
+  return processSubsequentMessage(caseRow, body);
+}
+
+async function processSubsequentMessage(
+  caseRow: typeof schema.reliefCases.$inferSelect,
+  body: string
+): Promise<ChatResult | HumanModeResult> {
+  const db = getDb();
+  const messageReceivedAt = new Date();
+
+  // Save reporter message before any AI call (spec §3). The case activity
+  // update is in the same transaction, and migration 0002 also installs a
+  // trigger for coordinator messages.
+  await db.transaction(async (tx) => {
+    // Re-check the immutable deadline in the same transaction as the insert.
+    // The earlier read in the route prevents normal expired requests, while
+    // this conditional update closes the race where a request crosses the
+    // deadline between authorization and persistence.
+    const [activeCase] = await tx
+      .update(schema.reliefCases)
+      .set({ updatedAt: messageReceivedAt })
+      .where(
+        and(
+          eq(schema.reliefCases.id, caseRow.id),
+          gt(schema.reliefCases.reporterSessionExpiresAt, messageReceivedAt)
+        )
+      )
+      .returning({ id: schema.reliefCases.id });
+
+    if (!activeCase) throw new Error("SESSION_EXPIRED");
+
+    await tx.insert(schema.messages).values({
+      caseId: caseRow.id,
+      senderType: "REPORTER",
+      body,
+    });
   });
 
   // If chat mode is HUMAN: do not call Ollama
   if (caseRow.chatMode === "HUMAN") {
-    return { saved: true, awaitingHuman: true };
+    return {
+      saved: true,
+      awaitingHuman: true,
+      caseId: caseRow.id,
+      publicRef: caseRow.publicRef,
+      status: caseRow.status,
+      chatMode: caseRow.chatMode,
+    };
   }
 
   // AI mode: run analysis
@@ -393,6 +479,10 @@ export async function loadCaseForReporter(
     where: eq(schema.reliefCases.id, caseId),
   });
   if (!caseRow) return null;
+
+  if (caseRow.reporterSessionExpiresAt.getTime() <= Date.now()) {
+    return null;
+  }
 
   if (!verifySessionToken(pepper, rawToken, caseRow.sessionTokenHash)) {
     return null;

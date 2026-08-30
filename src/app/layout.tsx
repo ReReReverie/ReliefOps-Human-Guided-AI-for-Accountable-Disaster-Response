@@ -16,7 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-white text-gray-900 antialiased">
+      <body className="min-h-screen bg-slate-50 text-slate-950 antialiased">
         <WarningBanner />
         <SiteHeader />
         <main className="overflow-hidden">{children}</main>

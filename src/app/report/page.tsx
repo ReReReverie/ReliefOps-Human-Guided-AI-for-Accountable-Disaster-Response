@@ -16,18 +16,23 @@
  * UI style: Telegram-inspired dark chat shell.
  */
 
-import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  FormEvent,
+  KeyboardEvent,
+} from "react";
+import { ReporterHistory } from "@/components/reporter/ReporterHistory";
+import { useReporterWorkspace } from "@/features/reporter/useReporterWorkspace";
+import type { ReporterMessage } from "@/features/reporter/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type MessageItem = {
-  id: string;
-  senderType: "REPORTER" | "AI" | "COORDINATOR";
-  body: string;
-  createdAt: string;
-};
+type MessageItem = ReporterMessage;
 
 type ChatState =
   | { phase: "idle" }
@@ -41,7 +46,15 @@ type ChatState =
       aiProvider: string;
       messages: MessageItem[];
     }
-  | { phase: "human_mode"; messages: MessageItem[]; publicRef: string }
+  | {
+      phase: "human_mode";
+      caseId: string;
+      publicRef: string;
+      status: string;
+      chatMode: string;
+      aiProvider: string;
+      messages: MessageItem[];
+    }
   | { phase: "error"; message: string };
 
 // ---------------------------------------------------------------------------
@@ -52,8 +65,40 @@ export default function ReportPage() {
   const [inputValue, setInputValue] = useState("");
   const [state, setState] = useState<ChatState>({ phase: "idle" });
   const [submitting, setSubmitting] = useState(false);
+  const [humanRequestError, setHumanRequestError] = useState<string | null>(
+    null
+  );
+  const [historyOpen, setHistoryOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatRequestIdRef = useRef(0);
+  const workspace = useReporterWorkspace();
+  const openHistory = useCallback(() => setHistoryOpen(true), []);
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
+
+  // Hydrate the unchanged Telegram message renderer when an authorized
+  // history item is selected. The workspace hook aborts stale selections.
+  useEffect(() => {
+    const transcript = workspace.transcript;
+    if (!transcript || transcript.caseId !== workspace.selectedCaseId) return;
+
+    setState({
+      phase: "active",
+      caseId: transcript.caseId,
+      publicRef: transcript.publicRef,
+      status: transcript.status,
+      chatMode: transcript.chatMode,
+      aiProvider: transcript.aiProvider,
+      messages: transcript.messages,
+    });
+    setHumanRequestError(null);
+    setInputValue("");
+  }, [workspace.selectedCaseId, workspace.transcript]);
+
+  useEffect(() => {
+    if (!workspace.transcriptError || !workspace.selectedCaseId) return;
+    setState({ phase: "error", message: workspace.transcriptError });
+  }, [workspace.selectedCaseId, workspace.transcriptError]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -73,17 +118,37 @@ export default function ReportPage() {
     const body = inputValue.trim();
     if (!body || submitting) return;
 
+    // Keep a selected case attached to retries after a chat or transcript
+    // error. The error state intentionally has no message payload, but the
+    // workspace selection is still an explicit authorization context.
+    const continuationCaseId =
+      (state.phase === "active" || state.phase === "human_mode"
+        ? state.caseId
+        : workspace.selectedCaseId);
+
+    const requestId = chatRequestIdRef.current + 1;
+    chatRequestIdRef.current = requestId;
     setSubmitting(true);
+    setHumanRequestError(null);
     setState((prev) =>
-      prev.phase === "idle" ? { phase: "loading" } : prev
+      prev.phase === "active" || prev.phase === "human_mode"
+        ? prev
+        : { phase: "loading" }
     );
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body }),
+        // `null` asks the workspace-aware API to create a new case. Older
+        // deployments strip the optional property and continue legacy flow.
+        body: JSON.stringify({
+          body,
+          caseId: continuationCaseId,
+        }),
       });
+
+      if (requestId !== chatRequestIdRef.current) return;
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -103,62 +168,114 @@ export default function ReportPage() {
       if ((data as { awaitingHuman?: boolean }).awaitingHuman === true) {
         setState((prev) => ({
           phase: "human_mode",
+          caseId:
+            prev.phase === "active" || prev.phase === "human_mode"
+              ? prev.caseId
+              : String(data.caseId ?? ""),
           messages:
             prev.phase === "active" || prev.phase === "human_mode"
-              ? (prev as { messages: MessageItem[] }).messages
+              ? prev.messages
               : [],
           publicRef:
-            prev.phase === "active"
-              ? (prev as { publicRef: string }).publicRef
-              : "",
+            prev.phase === "active" || prev.phase === "human_mode"
+              ? prev.publicRef
+              : String(data.publicRef ?? ""),
+          status:
+            prev.phase === "active" || prev.phase === "human_mode"
+              ? prev.status
+              : String(data.status ?? "INTAKE"),
+          chatMode: "HUMAN",
+          aiProvider:
+            prev.phase === "active" || prev.phase === "human_mode"
+              ? prev.aiProvider
+              : String(data.aiProvider ?? "ollama"),
         }));
+        if (typeof data.caseId === "string") workspace.activateCase(data.caseId);
+        refreshReporterHistory();
         return;
       }
 
       setState({
         phase: "active",
-        caseId: data.caseId,
-        publicRef: data.publicRef,
-        status: data.status,
-        chatMode: data.chatMode,
-        aiProvider: data.aiProvider,
+        caseId: String(data.caseId ?? ""),
+        publicRef: String(data.publicRef ?? ""),
+        status: String(data.status ?? "INTAKE"),
+        chatMode: String(data.chatMode ?? "AI"),
+        aiProvider: String(data.aiProvider ?? "ollama"),
         messages: data.messages ?? [],
       });
+      if (typeof data.caseId === "string") workspace.activateCase(data.caseId);
+      refreshReporterHistory();
     } catch {
+      if (requestId !== chatRequestIdRef.current) return;
       setState({
         phase: "error",
         message: "Network error. Please check your connection and try again.",
       });
     } finally {
-      setSubmitting(false);
+      if (requestId === chatRequestIdRef.current) setSubmitting(false);
     }
   }
 
   async function requestHuman() {
+    if (state.phase !== "active") return;
+    const requestId = chatRequestIdRef.current + 1;
+    chatRequestIdRef.current = requestId;
     setSubmitting(true);
+    setHumanRequestError(null);
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           body: "I would like to speak with a human coordinator please.",
+          caseId: state.caseId,
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (state.phase === "active") {
-          setState({
-            ...state,
-            status: data.status ?? state.status,
-            chatMode: data.chatMode ?? state.chatMode,
-            messages: data.messages ?? state.messages,
-          });
-        }
+      if (requestId !== chatRequestIdRef.current) return;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setHumanRequestError(
+          (err as { error?: string }).error ||
+            "The human coordinator could not be requested. Please try again."
+        );
+        return;
       }
+
+      const data = await res.json();
+      setState((previous) => {
+        if (previous.phase !== "active" && previous.phase !== "human_mode") {
+          return previous;
+        }
+        return {
+          phase: data.awaitingHuman === true ? "human_mode" : previous.phase,
+          caseId: previous.caseId,
+          publicRef: previous.publicRef,
+          status: data.status ?? previous.status,
+          chatMode:
+            data.awaitingHuman === true
+              ? "HUMAN"
+              : data.chatMode ?? previous.chatMode,
+          aiProvider: previous.aiProvider,
+          messages: Array.isArray(data.messages)
+            ? data.messages
+            : previous.messages,
+        };
+      });
+      if (
+        typeof data.caseId === "string" &&
+        data.caseId !== workspace.selectedCaseId
+      ) {
+        workspace.activateCase(data.caseId);
+      }
+      refreshReporterHistory();
     } catch {
-      // Non-critical; ignore
+      if (requestId !== chatRequestIdRef.current) return;
+      setHumanRequestError(
+        "Network error while requesting a human coordinator. Please try again."
+      );
     } finally {
-      setSubmitting(false);
+      if (requestId === chatRequestIdRef.current) setSubmitting(false);
     }
   }
 
@@ -172,6 +289,61 @@ export default function ReportPage() {
     }
   }
 
+  function confirmDraftDiscard(): boolean {
+    if (!inputValue.trim()) return true;
+    return window.confirm("Discard your unsent draft?");
+  }
+
+  function handleSelectConversation(caseId: string) {
+    if (
+      caseId === workspace.selectedCaseId &&
+      workspace.transcript &&
+      !workspace.transcriptError &&
+      !workspace.transcriptLoading
+    ) {
+      setHistoryOpen(false);
+      return;
+    }
+    if (!confirmDraftDiscard()) return;
+    chatRequestIdRef.current += 1;
+    setSubmitting(false);
+    setHumanRequestError(null);
+    setInputValue("");
+    setState({ phase: "loading" });
+    void workspace.selectConversation(caseId);
+    setHistoryOpen(false);
+  }
+
+  function handleNewChat(): boolean {
+    if (!confirmDraftDiscard()) return false;
+    chatRequestIdRef.current += 1;
+    setSubmitting(false);
+    setHumanRequestError(null);
+    setInputValue("");
+    workspace.clearSelection();
+    setState({ phase: "idle" });
+    setHistoryOpen(false);
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+    return true;
+  }
+
+  function refreshReporterHistory() {
+    if (workspace.status === "ready") {
+      void workspace.refreshHistory();
+    } else if (workspace.status === "initializing") {
+      // The hook queues this refresh so a first message completed during
+      // workspace initialization is included in the initial history page.
+      void workspace.refreshHistory();
+    } else if (
+      workspace.status === "unavailable" ||
+      workspace.status === "expired"
+    ) {
+      // A new first message can establish a fresh workspace after an expired
+      // browser session. Do not interrupt an initialization already in flight.
+      void workspace.initialize();
+    }
+  }
+
   const isMock = state.phase === "active" && state.aiProvider === "mock";
 
   const messages =
@@ -181,7 +353,10 @@ export default function ReportPage() {
       ? state.messages
       : [];
 
-  const chatMode = state.phase === "active" ? state.chatMode : "AI";
+  const chatMode =
+    state.phase === "active" || state.phase === "human_mode"
+      ? state.chatMode
+      : "AI";
 
   const publicRef =
     state.phase === "active"
@@ -190,8 +365,7 @@ export default function ReportPage() {
       ? state.publicRef
       : null;
 
-  const isActive =
-    state.phase === "active" || state.phase === "human_mode";
+  const isActive = state.phase === "active" || state.phase === "human_mode";
 
   return (
     /*
@@ -205,13 +379,44 @@ export default function ReportPage() {
      * viewport; we achieve this with the inline style on this element.
      */
     <div
+      className="relative flex min-h-0 w-full"
       style={{
         background: "#17212b",
-        fontFamily: "'Segoe UI', system-ui, sans-serif",
         height: "calc(100dvh - var(--site-header-h, 0px))",
       }}
-      className="flex flex-col"
     >
+      <ReporterHistory
+        status={workspace.status}
+        expiresAt={workspace.expiresAt}
+        items={workspace.history}
+        nextCursor={workspace.nextCursor}
+        loading={workspace.historyLoading}
+        error={workspace.historyError}
+        selectedCaseId={workspace.selectedCaseId}
+        transcriptLoading={workspace.transcriptLoading}
+        transcriptError={workspace.transcriptError}
+        mobileOpen={historyOpen}
+        onOpenMobile={openHistory}
+        onCloseMobile={closeHistory}
+        onSelect={handleSelectConversation}
+        onNewChat={handleNewChat}
+        onRefresh={() =>
+          void (workspace.status === "ready"
+            ? workspace.refreshHistory()
+            : workspace.initialize())
+        }
+        onLoadMore={() => void workspace.loadMoreHistory()}
+      />
+
+      <div className="min-h-0 min-w-0 flex-1">
+        <div
+          style={{
+            background: "#17212b",
+            fontFamily: "'Segoe UI', system-ui, sans-serif",
+            height: "calc(100dvh - var(--site-header-h, 0px))",
+          }}
+          className="flex flex-col"
+        >
       {/* ── Top bar ─────────────────────────────────────────────── */}
       <header
         style={{ background: "#232e3c", borderBottom: "1px solid #1a2535" }}
@@ -219,7 +424,7 @@ export default function ReportPage() {
       >
         {/* Avatar */}
         <div
-          style={{ background: "#3e88c7", width: 40, height: 40 }}
+          style={{ background: "#2563eb", width: 40, height: 40 }}
           className="rounded-full flex-none flex items-center justify-center text-white font-bold text-base select-none"
           aria-hidden="true"
         >
@@ -228,9 +433,9 @@ export default function ReportPage() {
 
         {/* Title + meta */}
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-white text-sm leading-tight truncate">
+          <h1 className="font-semibold text-white text-sm leading-tight truncate">
             ReliefOps Incident Report
-          </div>
+          </h1>
           <div style={{ color: "#8e9aac" }} className="text-xs leading-tight mt-0.5">
             {chatMode === "HUMAN"
               ? "Human coordinator connected"
@@ -238,7 +443,26 @@ export default function ReportPage() {
               ? "AI assistant active"
               : "Start by describing the incident"}
           </div>
+          {publicRef && (
+            <p
+              className="text-sm text-gray-500 truncate"
+              style={{ color: "#8e9aac" }}
+            >
+              Case reference: {publicRef}
+            </p>
+          )}
         </div>
+
+        <button
+          type="button"
+          onClick={openHistory}
+          aria-expanded={historyOpen}
+          aria-controls="reporter-history-drawer"
+          className="min-h-11 flex-none rounded-md border px-2 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#2b5278] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8ec7f4] lg:hidden"
+          style={{ background: "#1b3145", borderColor: "#355777" }}
+        >
+          History
+        </button>
 
         {/* Case ref pill */}
         {publicRef && (
@@ -369,7 +593,7 @@ export default function ReportPage() {
       >
         {/* Request a Human — appears above input when in AI mode and active */}
         {state.phase === "active" && chatMode === "AI" && (
-          <div className="flex justify-center mb-2">
+          <div className="mb-2 flex flex-col items-center gap-1">
             <button
               type="button"
               onClick={requestHuman}
@@ -379,6 +603,15 @@ export default function ReportPage() {
             >
               Request a human coordinator
             </button>
+            {humanRequestError && (
+              <p
+                role="alert"
+                className="max-w-xs text-center text-xs"
+                style={{ color: "#f7a0a0" }}
+              >
+                {humanRequestError}
+              </p>
+            )}
           </div>
         )}
 
@@ -434,9 +667,11 @@ export default function ReportPage() {
           </button>
         </form>
 
-        <p style={{ color: "#4a5568" }} className="text-xs mt-1.5 text-right pr-12">
+        <p style={{ color: "#a7b5c9" }} className="text-xs mt-1.5 text-right pr-12">
           {inputValue.length > 0 ? `${inputValue.length}/2000` : "Ctrl+Enter to send"}
         </p>
+      </div>
+        </div>
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ import {
   timestamp,
   json,
   unique,
+  index,
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,35 @@ export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
 
 // ---------------------------------------------------------------------------
+// reporter_workspaces
+// ---------------------------------------------------------------------------
+
+/**
+ * Browser-bound, account-free reporter workspace.
+ *
+ * Only the HMAC of the HttpOnly cookie is stored. The expiry is deliberately
+ * absolute: application code must never update it as a side effect of chat
+ * activity.
+ */
+export const reporterWorkspaces = pgTable(
+  "reporter_workspaces",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** HMAC-SHA-256(REPORTER_SESSION_PEPPER, workspace token). */
+    tokenHash: text("token_hash").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [index("reporter_workspaces_expires_at_idx").on(t.expiresAt)]
+);
+
+export type ReporterWorkspace = typeof reporterWorkspaces.$inferSelect;
+export type NewReporterWorkspace = typeof reporterWorkspaces.$inferInsert;
+
+// ---------------------------------------------------------------------------
 // relief_cases
 // ---------------------------------------------------------------------------
 
@@ -83,6 +113,15 @@ export const reliefCases = pgTable("relief_cases", {
   sessionTokenHash: text("session_token_hash").notNull(),
   /** Immutable — set from the first reporter message's server receive time. */
   sessionStartedAt: timestamp("session_started_at", {
+    withTimezone: true,
+  }).notNull(),
+  /** Nullable during migration; set only after proving legacy cookie ownership. */
+  reporterWorkspaceId: uuid("reporter_workspace_id").references(
+    () => reporterWorkspaces.id,
+    { onDelete: "set null" }
+  ),
+  /** Absolute reporter access deadline; activity never extends this value. */
+  reporterSessionExpiresAt: timestamp("reporter_session_expires_at", {
     withTimezone: true,
   }).notNull(),
   status: caseStatusEnum("status").notNull().default("INTAKE"),
@@ -101,7 +140,15 @@ export const reliefCases = pgTable("relief_cases", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+},
+  (t) => [
+    index("relief_cases_reporter_workspace_id_idx").on(t.reporterWorkspaceId),
+    index("relief_cases_reporter_session_expires_at_idx").on(
+      t.reporterSessionExpiresAt
+    ),
+    index("relief_cases_updated_at_idx").on(t.updatedAt),
+  ]
+);
 
 export type ReliefCase = typeof reliefCases.$inferSelect;
 export type NewReliefCase = typeof reliefCases.$inferInsert;

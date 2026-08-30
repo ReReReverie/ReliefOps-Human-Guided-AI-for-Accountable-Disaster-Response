@@ -1,16 +1,32 @@
-/**
- * `/verify/[auditId]` — Public audit verification page.
- *
- * Shows verification result by comparing:
- *   1. Stored DB hash
- *   2. Recomputed hash from stored payload + nonce (server-side only)
- *   3. On-chain Manage Data value from Horizon
- *
- * Public view NEVER exposes: nonce, session token hash, reporter data.
- */
+/** Public, privacy-safe Stellar audit verification view. */
+import Link from "next/link";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  CheckCircle2,
+  Clock3,
+  FileCheck2,
+  Hash,
+  ShieldAlert,
+  XCircle,
+} from "lucide-react";
+import { Alert, Badge, Card, StatusBadge } from "@/components/ui";
 import { verifyAuditRecord } from "@/lib/stellar/verify";
 
 export const dynamic = "force-dynamic";
+
+function formatDate(value: Date | null) {
+  return value ? value.toISOString() : null;
+}
+
+function HashRow({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <dt className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{label}</dt>
+      <dd className="mt-2 break-all font-mono text-xs leading-5 text-slate-800">{value ?? "—"}</dd>
+    </div>
+  );
+}
 
 export default async function VerifyPage({
   params,
@@ -19,116 +35,68 @@ export default async function VerifyPage({
 }) {
   const { auditId } = await params;
   const result = await verifyAuditRecord(auditId);
+  const isSuccess = result.status === "VERIFIED";
+  const isPending = result.status === "NOT_ANCHORED";
 
   return (
-    <div className="max-w-xl mx-auto p-8 space-y-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Audit Verification</h1>
+    <div className="min-h-[calc(100vh-8rem)] bg-slate-50">
+      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+        <Link href="/ops" className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
+          <ArrowLeft aria-hidden="true" size={16} /> Return to Operator Dashboard
+        </Link>
 
-      {result.status === "NOT_FOUND" && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-700 font-medium">Audit record not found.</p>
-          <p className="text-sm text-red-600 mt-1">
-            No audit record exists for ID: <span className="font-mono">{auditId}</span>
-          </p>
+        <div className="mt-7 max-w-2xl">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-700"><FileCheck2 aria-hidden="true" size={15} /> Independent integrity check</div>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Audit Verification</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">This public view confirms the integrity status of a synthetic audit record without exposing reporter content, session material, or internal analysis.</p>
         </div>
-      )}
 
-      {result.status === "NOT_ANCHORED" && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-2">
-          <p className="text-yellow-800 font-medium">Not yet anchored on Stellar.</p>
-          <p className="text-sm text-yellow-700">
-            This audit record has not been submitted to the Stellar blockchain yet.
-          </p>
-          {result.storedHash && (
-            <div className="text-sm">
-              <span className="text-gray-600">Record hash: </span>
-              <span className="font-mono text-xs break-all text-gray-800">
-                {result.storedHash}
-              </span>
+        <Card className="mt-8 overflow-hidden">
+          <div className={`border-b px-5 py-6 sm:px-7 ${isSuccess ? "border-emerald-200 bg-emerald-50" : isPending ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50"}`}>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${isSuccess ? "bg-emerald-100 text-emerald-700" : isPending ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-700"}`}>
+                  {isSuccess ? <CheckCircle2 aria-hidden="true" size={23} /> : isPending ? <Clock3 aria-hidden="true" size={23} /> : <XCircle aria-hidden="true" size={23} />}
+                </span>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Verification status</p>
+                  <div className="mt-2"><StatusBadge status={result.status} /></div>
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-slate-700">
+                    {isSuccess ? "Stored, recomputed, and on-chain hashes match." : isPending ? "The record exists but has not been anchored on Stellar yet." : result.status === "NOT_FOUND" ? "No public audit record was found for this identifier." : "The verification values do not all match; treat this record as unverified."}
+                  </p>
+                </div>
+              </div>
+              <Badge tone={isSuccess ? "success" : isPending ? "warning" : "danger"} icon={isSuccess ? CheckCircle2 : isPending ? Clock3 : ShieldAlert}>{isSuccess ? "Integrity confirmed" : isPending ? "Awaiting anchor" : "Review required"}</Badge>
             </div>
-          )}
-        </div>
-      )}
+          </div>
 
-      {result.status === "VERIFIED" && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
-          <p className="text-green-800 font-semibold text-lg">✓ Verified</p>
-          <p className="text-sm text-green-700">
-            All three hashes match: the stored hash, the recomputed hash, and the
-            on-chain value are identical.
-          </p>
-          <HashRow label="Record hash" value={result.storedHash} />
-        </div>
-      )}
+          <div className="space-y-7 p-5 sm:p-7">
+            {result.status === "NOT_FOUND" ? (
+              <Alert tone="danger" role="alert"><p className="font-semibold">Audit record not found.</p><p className="mt-1">No audit record exists for this ID: <span className="font-mono text-xs">{auditId}</span>.</p></Alert>
+            ) : null}
+            {result.status === "NOT_ANCHORED" ? <Alert tone="warning"><p className="font-semibold">Not yet anchored on Stellar.</p><p className="mt-1">The record is stored locally and can be checked again after the anchor service completes.</p></Alert> : null}
 
-      {result.status === "FAILED" && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
-          <p className="text-red-800 font-semibold text-lg">✗ Verification Failed</p>
-          <p className="text-sm text-red-700">
-            The hashes do not all match. The on-chain record may not correspond to
-            the stored payload.
-          </p>
-          <HashRow label="Stored hash" value={result.storedHash} />
-          <HashRow label="Recomputed hash" value={result.recomputedHash} />
-          <HashRow label="On-chain hash" value={result.onChainHash} />
-        </div>
-      )}
+            {result.status !== "NOT_FOUND" ? (
+              <section aria-labelledby="hashes-title">
+                <div className="flex items-center gap-2"><Hash aria-hidden="true" className="text-blue-700" size={18} /><h2 id="hashes-title" className="text-base font-bold text-slate-950">Record hashes</h2></div>
+                <p className="mt-1 text-sm text-slate-600">Hashes are shown for independent comparison; no private payload is included.</p>
+                <dl className="mt-4 grid gap-3 sm:grid-cols-2"><HashRow label={result.status === "VERIFIED" ? "Record hash" : "Stored hash"} value={result.storedHash} />{result.status === "FAILED" ? <><HashRow label="Recomputed hash" value={result.recomputedHash} /><HashRow label="On-chain hash" value={result.onChainHash} /></> : null}</dl>
+              </section>
+            ) : null}
 
-      {/* Timestamps — shown for VERIFIED and NOT_ANCHORED */}
-      {(result.status === "VERIFIED" || result.status === "NOT_ANCHORED") && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-            Timestamps
-          </h2>
-          {result.firstMessageAt && (
-            <div className="text-sm">
-              <span className="text-gray-600">First message received at: </span>
-              <span className="text-gray-900">
-                {result.firstMessageAt.toISOString()}
-              </span>
-            </div>
-          )}
-          {result.ledgerCloseTime && (
-            <div className="text-sm">
-              <span className="text-gray-600">Stellar ledger closed at: </span>
-              <span className="text-gray-900">
-                {result.ledgerCloseTime.toISOString()}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+            {(result.status === "VERIFIED" || result.status === "NOT_ANCHORED") ? (
+              <section aria-labelledby="timestamps-title" className="border-t border-slate-200 pt-6">
+                <div className="flex items-center gap-2"><Clock3 aria-hidden="true" className="text-blue-700" size={18} /><h2 id="timestamps-title" className="text-base font-bold text-slate-950">Record timeline</h2></div>
+                <dl className="mt-4 grid gap-4 sm:grid-cols-2"><div><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">First message received</dt><dd className="mt-1 break-words text-sm text-slate-800">{formatDate(result.firstMessageAt) ?? "—"}</dd></div><div><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Stellar ledger closed</dt><dd className="mt-1 break-words text-sm text-slate-800">{formatDate(result.ledgerCloseTime) ?? "Not available"}</dd></div></dl>
+              </section>
+            ) : null}
 
-      {/* Stellar transaction link — shown when anchored */}
-      {result.stellarTxHash && (
-        <div className="text-sm space-y-1">
-          <span className="text-gray-600">Stellar TX: </span>
-          <a
-            href={`https://stellar.expert/explorer/testnet/tx/${result.stellarTxHash}`}
-            className="font-mono text-xs text-blue-600 hover:underline break-all"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {result.stellarTxHash}
-          </a>
-        </div>
-      )}
+            {result.stellarTxHash ? <section aria-labelledby="transaction-title" className="border-t border-slate-200 pt-6"><div className="flex items-center gap-2"><ShieldAlert aria-hidden="true" className="text-blue-700" size={18} /><h2 id="transaction-title" className="text-base font-bold text-slate-950">Stellar transaction</h2></div><a href={`https://stellar.expert/explorer/testnet/tx/${encodeURIComponent(result.stellarTxHash)}`} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex min-h-11 max-w-full items-center gap-2 break-all rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-blue-700 hover:border-blue-400 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"><span className="break-all">{result.stellarTxHash}</span><ArrowUpRight aria-hidden="true" className="shrink-0" size={15} /></a></section> : null}
+          </div>
+        </Card>
 
-      {/* Audit ID */}
-      <div className="text-xs text-gray-500">
-        Audit ID: <span className="font-mono">{auditId}</span>
+        <div className="mt-5 flex flex-wrap items-center gap-2 text-xs text-slate-500"><span>Audit ID:</span><span className="break-all font-mono">{auditId}</span></div>
       </div>
-    </div>
-  );
-}
-
-function HashRow({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="text-sm">
-      <span className="text-gray-600">{label}: </span>
-      <span className="font-mono text-xs break-all text-gray-800">
-        {value ?? "—"}
-      </span>
     </div>
   );
 }

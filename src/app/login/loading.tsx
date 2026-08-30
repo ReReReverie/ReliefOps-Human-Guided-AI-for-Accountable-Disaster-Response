@@ -1,30 +1,21 @@
-/**
- * src/app/login/loading.tsx — Skeleton shown while the login page loads.
- * Matches the centred card layout of the real login form.
- */
+import { Skeleton } from "@/components/ui";
+
 export default function LoginLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-sm bg-white border border-gray-200 rounded-lg p-8 space-y-5">
-        {/* Title */}
-        <div className="h-6 w-44 bg-gray-200 rounded animate-pulse" />
-        {/* Subtitle */}
-        <div className="h-4 w-64 bg-gray-100 rounded animate-pulse" />
-
-        {/* Email field */}
-        <div className="space-y-1">
-          <div className="h-4 w-12 bg-gray-200 rounded animate-pulse" />
-          <div className="h-9 w-full bg-gray-100 border border-gray-200 rounded animate-pulse" />
+    <div className="min-h-[calc(100vh-8rem)] bg-slate-50 px-4 py-10 sm:px-6 sm:py-16">
+      <div className="mx-auto grid max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[0.92fr_1.08fr]">
+        <Skeleton className="min-h-64 rounded-none bg-slate-900/90 lg:min-h-[30rem]" />
+        <div className="space-y-6 px-6 py-8 sm:px-10 sm:py-12">
+          <Skeleton className="h-3 w-40" />
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-4/5" />
+          <div className="space-y-5 pt-4">
+            <div className="space-y-2"><Skeleton className="h-4 w-16" /><Skeleton className="h-12 w-full" /></div>
+            <div className="space-y-2"><Skeleton className="h-4 w-20" /><Skeleton className="h-12 w-full" /></div>
+            <Skeleton className="h-12 w-full bg-blue-200" />
+          </div>
         </div>
-
-        {/* Password field */}
-        <div className="space-y-1">
-          <div className="h-4 w-18 bg-gray-200 rounded animate-pulse" />
-          <div className="h-9 w-full bg-gray-100 border border-gray-200 rounded animate-pulse" />
-        </div>
-
-        {/* Submit button */}
-        <div className="h-9 w-full bg-blue-200 rounded animate-pulse" />
       </div>
     </div>
   );

@@ -10,8 +10,10 @@
  * Plan §9 / spec §3.
  */
 import { useTransition, useState } from "react";
+import { Bot, UserRound } from "lucide-react";
 import { resumeAi, sendCoordinatorReply } from "./actions";
 import { OverrideControl } from "./OverrideControl";
+import { Alert, Badge, Button, FieldLabel } from "@/components/ui";
 
 type Props = {
   caseId: string;
@@ -44,51 +46,52 @@ export function ChatControls({ caseId, chatMode, isClosed }: Props) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
         {/* Override control: orange ! button (AI) or active badge (HUMAN) */}
         <OverrideControl caseId={caseId} chatMode={chatMode} isClosed={isClosed} />
 
         {/* Resume AI button — only in HUMAN mode */}
         {chatMode === "HUMAN" && (
-          <button
+          <Button
+            type="button"
             onClick={handleResumeAi}
             disabled={isPending}
-            className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            size="sm"
+            variant="secondary"
           >
             Resume AI
-          </button>
+          </Button>
         )}
 
-        <span className="text-sm text-gray-500">
-          Chat mode:{" "}
-          <span className={chatMode === "HUMAN" ? "font-semibold text-orange-700" : "font-semibold text-blue-700"}>
-            {chatMode}
-          </span>
-        </span>
+        <Badge tone={chatMode === "HUMAN" ? "success" : "info"} icon={chatMode === "HUMAN" ? UserRound : Bot}>Chat mode: {chatMode}</Badge>
       </div>
 
       {chatMode === "HUMAN" && (
-        <div className="space-y-2">
+        <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+          <FieldLabel htmlFor={`coordinator-reply-${caseId}`}>Coordinator reply</FieldLabel>
           <textarea
+            id={`coordinator-reply-${caseId}`}
             value={replyBody}
             onChange={(e) => setReplyBody(e.target.value)}
             maxLength={2000}
             rows={3}
             placeholder="Type a reply to the reporter…"
-            className="w-full px-3 py-2 border border-gray-300 rounded text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="min-h-24 w-full resize-none rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 shadow-sm focus:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           />
           {replyError && (
-            <p className="text-sm text-red-600">{replyError}</p>
+            <Alert tone="danger" role="alert">{replyError}</Alert>
           )}
-          <button
+          <Button
+            type="button"
             onClick={handleSendReply}
             disabled={isPending || !replyBody.trim()}
-            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+            size="sm"
+            variant="success"
           >
             Send Reply
-          </button>
-          <span className="text-xs text-gray-400 ml-2">
+          </Button>
+          <span className="ml-2 text-xs text-slate-500">
             {replyBody.length}/2000
           </span>
         </div>

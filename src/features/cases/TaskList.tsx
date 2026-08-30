@@ -18,6 +18,7 @@ import {
   addTask,
   type TaskStatus,
 } from "./actions";
+import { Button } from "@/components/ui";
 
 type Task = {
   id: string;
@@ -83,29 +84,33 @@ function TaskRow({ task }: { task: Task; caseId: string }) {
   }
 
   return (
-    <div className={`border rounded p-3 space-y-2 ${task.approved ? "bg-green-50 border-green-200" : "bg-white border-gray-200"}`}>
+    <div className={`space-y-3 rounded-xl border p-4 ${task.approved ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-white"}`}>
       <div className="flex items-start gap-3">
         {/* Approve checkbox */}
-        <label className="flex items-center gap-1.5 mt-0.5">
+          <label className="flex min-h-10 items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={task.approved}
             disabled={task.approved || isPending}
             onChange={handleApprove}
-            className="accent-green-600"
+            className="h-4 w-4 accent-emerald-700"
             title={task.approved ? "Approved" : "Approve task"}
           />
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-slate-600">
             {task.approved ? "Approved" : "Approve"}
           </span>
         </label>
 
         {/* Status selector */}
+        <label htmlFor={`task-status-${task.id}`} className="sr-only">
+          Status for {task.title}
+        </label>
         <select
+          id={`task-status-${task.id}`}
           value={task.status}
           onChange={(e) => handleStatusChange(e.target.value as TaskStatus)}
           disabled={isPending}
-          className="text-xs border border-gray-300 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          className="min-h-10 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-800 focus:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
         >
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>
@@ -117,12 +122,16 @@ function TaskRow({ task }: { task: Task; caseId: string }) {
         {/* Title */}
         <div className="flex-1 min-w-0">
           {editing ? (
-            <input
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              maxLength={120}
-              className="w-full text-sm border border-gray-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
-            />
+            <>
+              <label htmlFor={`task-title-${task.id}`} className="sr-only">Title for {task.title}</label>
+              <input
+                id={`task-title-${task.id}`}
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                maxLength={120}
+                className="min-h-10 w-full rounded-lg border border-slate-300 px-2 text-sm focus:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              />
+            </>
           ) : (
             <span className="text-sm font-medium text-gray-900 break-words">
               {task.title}
@@ -136,23 +145,26 @@ function TaskRow({ task }: { task: Task; caseId: string }) {
             {editing ? (
               <>
                 <button
+                  type="button"
                   onClick={handleSaveEdit}
                   disabled={isPending}
-                  className="text-xs px-2 py-0.5 bg-blue-600 text-white rounded disabled:opacity-50"
+                  className="min-h-10 rounded-lg bg-blue-700 px-3 text-xs font-semibold text-white disabled:opacity-50"
                 >
                   Save
                 </button>
                 <button
+                  type="button"
                   onClick={() => setEditing(false)}
-                  className="text-xs px-2 py-0.5 border border-gray-300 rounded"
+                  className="min-h-10 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700"
                 >
                   Cancel
                 </button>
               </>
             ) : (
               <button
+                type="button"
                 onClick={() => setEditing(true)}
-                className="text-xs px-2 py-0.5 border border-gray-300 rounded hover:bg-gray-50"
+                className="min-h-10 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Edit
               </button>
@@ -164,18 +176,22 @@ function TaskRow({ task }: { task: Task; caseId: string }) {
       {/* Details and owner — editable */}
       {editing ? (
         <div className="pl-12 space-y-1.5">
+          <label htmlFor={`task-details-${task.id}`} className="sr-only">Details for {task.title}</label>
           <input
+            id={`task-details-${task.id}`}
             value={editDetails}
             onChange={(e) => setEditDetails(e.target.value)}
             maxLength={500}
             placeholder="Details (optional)"
-            className="w-full text-sm border border-gray-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="min-h-10 w-full rounded-lg border border-slate-300 px-2 text-sm focus:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           />
+          <label htmlFor={`task-owner-${task.id}`} className="sr-only">Proposed owner for {task.title}</label>
           <input
+            id={`task-owner-${task.id}`}
             value={editOwner}
             onChange={(e) => setEditOwner(e.target.value)}
             placeholder="Proposed owner (optional)"
-            className="w-full text-sm border border-gray-300 rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="min-h-10 w-full rounded-lg border border-slate-300 px-2 text-sm focus:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           />
         </div>
       ) : (
@@ -191,7 +207,7 @@ function TaskRow({ task }: { task: Task; caseId: string }) {
         </div>
       )}
 
-      {error && <p className="text-xs text-red-600 pl-12">{error}</p>}
+      {error && <p role="alert" className="pl-12 text-xs text-red-700">{error}</p>}
     </div>
   );
 }
@@ -234,52 +250,64 @@ export function TaskList({ caseId, tasks }: Props) {
       )}
 
       {showAddForm ? (
-        <div className="border border-dashed border-gray-300 rounded p-3 space-y-2">
-          <p className="text-sm font-medium text-gray-700">Add Task</p>
+        <div role="group" aria-labelledby={`add-task-title-${caseId}`} className="border border-dashed border-gray-300 rounded p-3 space-y-2">
+        <p id={`add-task-title-${caseId}`} className="text-sm font-semibold text-slate-800">Add Task</p>
+          <label htmlFor={`new-task-title-${caseId}`} className="sr-only">Task title</label>
           <input
+            id={`new-task-title-${caseId}`}
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             maxLength={120}
             placeholder="Task title (required)"
-            className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm focus:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           />
+          <label htmlFor={`new-task-details-${caseId}`} className="sr-only">Task details</label>
           <input
+            id={`new-task-details-${caseId}`}
             value={newDetails}
             onChange={(e) => setNewDetails(e.target.value)}
             maxLength={500}
             placeholder="Details (optional)"
-            className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm focus:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           />
+          <label htmlFor={`new-task-owner-${caseId}`} className="sr-only">Proposed owner</label>
           <input
+            id={`new-task-owner-${caseId}`}
             value={newOwner}
             onChange={(e) => setNewOwner(e.target.value)}
             placeholder="Proposed owner (optional)"
-            className="w-full text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            className="min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm focus:border-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           />
-          {addError && <p className="text-sm text-red-600">{addError}</p>}
+          {addError && <p role="alert" className="text-sm text-red-700">{addError}</p>}
           <div className="flex gap-2">
-            <button
+            <Button
+              type="button"
               onClick={handleAddTask}
               disabled={isPending || !newTitle.trim()}
-              className="text-sm px-3 py-1.5 bg-blue-600 text-white rounded disabled:opacity-50"
+              size="sm"
             >
               {isPending ? "Adding…" : "Add Task"}
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
               onClick={() => setShowAddForm(false)}
-              className="text-sm px-3 py-1.5 border border-gray-300 rounded"
+              size="sm"
+              variant="secondary"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       ) : (
-        <button
+        <Button
+          type="button"
           onClick={() => setShowAddForm(true)}
-          className="text-sm text-blue-600 hover:underline"
+          variant="subtle"
+          size="sm"
+          className="px-0 text-blue-700 hover:bg-transparent hover:underline"
         >
           + Add task
-        </button>
+        </Button>
       )}
     </div>
   );

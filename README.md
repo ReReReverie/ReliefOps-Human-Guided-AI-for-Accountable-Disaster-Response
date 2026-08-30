@@ -17,6 +17,7 @@ The project is being built for the IBM AI Builders Wild Card Challenge. IBM Bob 
 - [Technology stack](#technology-stack)
 - [Clone the repository](#clone-the-repository)
 - [Local setup and usage](#local-setup-and-usage)
+- [Reporter workspace access](#reporter-workspace-access)
 - [Ollama setup](#ollama-setup)
 - [Mock AI for teammates](#mock-ai-for-teammates)
 - [Stellar Testnet audit signer setup](#stellar-testnet-audit-signer-setup)
@@ -112,7 +113,7 @@ The demonstration computer runs Next.js, Ollama, and the browser. Neon remains i
 | Database | Neon Free Postgres | Cases, messages, AI assessments, human decisions, tasks, and audit records |
 | Database access | Drizzle ORM and migrations | Typed server-side queries and versioned schema changes |
 | Staff authentication | Neon Auth | Coordinator login |
-| Reporter access | Server-issued `HttpOnly` session cookie | Account-free reporter isolation using HMAC-hashed tokens |
+| Reporter access | Server-issued `HttpOnly` workspace and per-case cookies | Account-free, browser-bound reporter history using HMAC-hashed tokens and an absolute 10-hour deadline |
 | Input and AI validation | Zod | Validation of forms, API input, environment variables, and model output |
 | Local AI runtime | Ollama | Runs the real AI locally without cloud credentials or inference fees |
 | AI model | IBM Granite `granite4.1:3b` | Fact extraction, missing-information questions, urgency suggestions, summaries, and task proposals |
@@ -169,7 +170,7 @@ cd ReliefOps-Human-Guided-AI-for-Accountable-Disaster-Response
 
 3. Create a Neon Postgres project and enable Neon Auth. Put the project URL and server-side credentials in `.env.local`. Do not expose these values in browser code or commit them.
 
-4. Apply the database schema through the Neon SQL Editor. Paste and execute the complete contents of [`drizzle/migrations/0001_initial.sql`](drizzle/migrations/0001_initial.sql). This repository contains the SQL migration artifact but no Drizzle migration journal or migration script, so do not rely on `drizzle-kit migrate` for this setup.
+4. Apply the database schema through the Neon SQL Editor. Paste and execute the complete contents of [`drizzle/migrations/0001_initial.sql`](drizzle/migrations/0001_initial.sql), followed by [`drizzle/migrations/0002_reporter_workspaces.sql`](drizzle/migrations/0002_reporter_workspaces.sql). The second migration is idempotent and backfills each existing case's reporter deadline from its original session start without restoring already-expired access. This repository contains SQL migration artifacts but no Drizzle migration journal or migration script, so do not rely on `drizzle-kit migrate` for this setup.
 
 5. Create the demonstration coordinator account in Neon Auth, then copy its `user_id`. From PowerShell in the repository root, seed the matching coordinator profile with process-level variables:
 
@@ -206,6 +207,33 @@ cd ReliefOps-Human-Guided-AI-for-Accountable-Disaster-Response
    ```
 
    `pnpm test:e2e` requires a separately running `pnpm dev` server, process-level `DATABASE_URL`, and process-level `E2E_COORDINATOR_EMAIL` plus `E2E_COORDINATOR_PASSWORD` for coordinator scenarios in the shell that runs the test. Without those live settings, the Playwright scenarios skip.
+
+## Reporter workspace access
+
+Reporter history is intentionally account-free and browser-bound. On the first
+workspace request, ReliefOps issues a random `reliefops_workspace` HttpOnly
+cookie and stores only its domain-separated HMAC in PostgreSQL. A workspace and
+every case associated with it have an absolute 10-hour access deadline measured
+from creation (or, during legacy-cookie adoption, from that case's original
+session start). Sending another message never extends the deadline. Cookies
+are `SameSite=Lax`, scoped to `/`, and use `Secure` outside local HTTP
+development.
+
+The workspace cookie is the only credential used by the history list and
+transcript endpoint. History rows contain metadata only; reporter bodies are
+returned only for a case authorized through workspace membership. The legacy
+`reliefops_session` cookie remains supported for one-case migration and older
+clients, but a legacy cookie can associate only the one case it proves and
+cannot extend its existing expiry. Case UUIDs, public references, browser
+storage, and a Docker volume are not authorization credentials.
+
+This prototype has no reporter account, recovery secret, cross-device access,
+or account recovery flow. Losing or clearing the workspace cookie, reaching
+the 10-hour deadline, revoking the workspace, pruning the PostgreSQL volume,
+running `docker compose down -v`, or losing the database host makes history
+unavailable. Start a new synthetic report to create a new workspace when
+access is available. Never use real personal, medical, or disaster-victim
+information.
 
 ## Ollama setup
 

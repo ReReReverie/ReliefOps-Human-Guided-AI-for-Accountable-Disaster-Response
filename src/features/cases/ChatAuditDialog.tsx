@@ -10,23 +10,7 @@
  */
 import { useState, useEffect, useRef, useCallback, useTransition } from "react";
 import type { ChatAuditVerificationDto } from "@/app/api/audit/[auditId]/verify/route";
-
-// ---------------------------------------------------------------------------
-// Status colour helpers
-// ---------------------------------------------------------------------------
-
-function dbStatusBadge(status: string) {
-  if (status === "ANCHORED") return "bg-green-100 text-green-800";
-  if (status === "FAILED") return "bg-red-100 text-red-800";
-  return "bg-yellow-100 text-yellow-800"; // PENDING
-}
-
-function verificationBadge(status: string) {
-  if (status === "VERIFIED") return "bg-green-100 text-green-800";
-  if (status === "FAILED") return "bg-red-100 text-red-800";
-  if (status === "NOT_ANCHORED") return "bg-yellow-100 text-yellow-800";
-  return "bg-gray-100 text-gray-600"; // NOT_FOUND
-}
+import { Alert, Badge, Button, Skeleton, StatusBadge } from "@/components/ui";
 
 // ---------------------------------------------------------------------------
 // Timestamp formatter
@@ -36,6 +20,7 @@ function fmtTimestamp(iso: string | null): { local: string; utc: string } | null
   if (!iso) return null;
   try {
     const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
     return {
       local: d.toLocaleString(),
       utc: d.toUTCString(),
@@ -67,25 +52,48 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const requestIdRef = useRef(0);
+
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    // Return focus to trigger
+    setTimeout(() => triggerRef.current?.focus(), 0);
+  }, []);
 
   // ── fetch verification data ──────────────────────────────────────────────
   const load = useCallback(async () => {
     if (!auditId) return;
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setLoadError(null);
     try {
       const res = await fetch(`/api/audit/${auditId}/verify`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setLoadError((body as { error?: string }).error ?? "Failed to load audit data.");
+        if (requestId === requestIdRef.current) {
+          setLoadError((body as { error?: string }).error ?? "Failed to load audit data.");
+        }
         return;
       }
-      setData(await res.json());
+      const nextData = (await res.json()) as ChatAuditVerificationDto;
+      if (requestId === requestIdRef.current) setData(nextData);
     } catch {
-      setLoadError("Network error loading audit data.");
+      if (requestId === requestIdRef.current) {
+        setLoadError("Network error loading audit data.");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
+  }, [auditId]);
+
+  // A shared header instance survives client navigation between case pages.
+  // Clear the previous case's audit payload before the next dialog can open.
+  useEffect(() => {
+    ++requestIdRef.current;
+    setOpen(false);
+    setData(null);
+    setLoadError(null);
+    setLoading(false);
   }, [auditId]);
 
   // Load lazily when dialog opens
@@ -108,7 +116,7 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open]); // handleClose is stable — defined in the same component scope
+  }, [open, handleClose]);
 
   // Trap focus inside dialog
   useEffect(() => {
@@ -128,17 +136,16 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
     setOpen(true);
   }
 
-  function handleClose() {
-    setOpen(false);
-    // Return focus to trigger
-    setTimeout(() => triggerRef.current?.focus(), 0);
-  }
-
   async function handleRetry() {
     if (!auditId) return;
     startRetryTransition(async () => {
       try {
-        await fetch(`/api/audit/${auditId}/retry`, { method: "POST" });
+        const response = await fetch(`/api/audit/${auditId}/retry`, { method: "POST" });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          setLoadError((body as { error?: string }).error ?? "Retry request failed.");
+          return;
+        }
         // Reload verification after retry
         await load();
       } catch {
@@ -150,13 +157,13 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
   if (!auditId) {
     if (asNavButton) {
       return (
-        <span className="inline-flex min-h-11 items-center justify-center rounded-md border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-400 sm:min-w-40">
+        <span className="ops-audit-placeholder inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-400 sm:min-w-40">
           Chat Audit
         </span>
       );
     }
     return (
-      <span className="text-xs text-gray-400 px-3 py-1.5 border border-gray-200 rounded">
+      <span className="inline-flex min-h-10 items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500">
         No audit record
       </span>
     );
@@ -171,11 +178,12 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
       {/* Trigger button */}
       <button
         ref={triggerRef}
+        type="button"
         onClick={handleOpen}
         className={
           asNavButton
-            ? "inline-flex min-h-11 w-full items-center justify-center rounded-md border border-indigo-600 bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:border-indigo-700 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:min-w-40"
-            : "text-sm px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            ? "inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:border-blue-800 hover:bg-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 sm:min-w-40 motion-reduce:transition-none"
+            : "inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
         }
         aria-haspopup="dialog"
       >
@@ -187,7 +195,7 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.45)" }}
-          aria-hidden="true"
+          role="presentation"
           onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
         >
           <div
@@ -195,59 +203,56 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
             role="dialog"
             aria-modal="true"
             aria-label="Chat Audit Record"
-            className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-              <h2 className="text-base font-semibold text-gray-900">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <h2 className="text-base font-bold text-slate-950">
                 Chat Audit Record
               </h2>
               <button
                 ref={closeButtonRef}
                 onClick={handleClose}
                 aria-label="Close dialog"
-                className="text-gray-400 hover:text-gray-600 text-xl leading-none focus:outline-none focus:ring-2 focus:ring-indigo-400 rounded"
+                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg text-xl leading-none text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               >
                 ×
               </button>
             </div>
 
             {/* Body */}
-            <div className="px-5 py-4 space-y-4 text-sm">
+            <div className="space-y-4 px-5 py-5 text-sm">
 
               {/* Loading */}
               {loading && (
-                <div className="flex items-center gap-2 text-gray-500">
-                  <span className="inline-block w-4 h-4 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" aria-hidden="true" />
+                <div role="status" className="flex items-center gap-2 text-slate-600">
+                  <Skeleton className="h-4 w-4 rounded-full" />
                   Loading verification data…
                 </div>
               )}
 
               {/* Error */}
               {loadError && !loading && (
-                <div role="alert" className="text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
-                  {loadError}
+                <Alert tone="danger" role="alert">
+                  <span>{loadError}</span>
                   <button
+                    type="button"
                     onClick={load}
-                    className="ml-3 text-xs underline hover:no-underline"
+                    className="ml-3 min-h-9 font-semibold underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
                   >
                     Retry
                   </button>
-                </div>
+                </Alert>
               )}
 
               {/* Loaded */}
               {data && !loading && (
                 <>
                   {/* Status row */}
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${dbStatusBadge(data.dbStatus)}`}>
-                      DB: {data.dbStatus}
-                    </span>
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${verificationBadge(data.verificationStatus)}`}>
-                      Stellar: {data.verificationStatus}
-                    </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="neutral">DB</Badge><StatusBadge status={data.dbStatus} />
+                    <Badge tone="neutral">Stellar</Badge><StatusBadge status={data.verificationStatus} />
                   </div>
 
                   {/* Chat start time */}
@@ -255,9 +260,9 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
                     const ts = fmtTimestamp(data.chatStartedAt);
                     return ts ? (
                       <div className="space-y-0.5">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Chat Start Time</p>
-                        <p className="text-gray-800">{ts.local}</p>
-                        <p className="text-gray-500 text-xs font-mono">{ts.utc}</p>
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Chat Start Time</p>
+                        <p className="text-slate-800">{ts.local}</p>
+                        <p className="font-mono text-xs text-slate-500">{ts.utc}</p>
                       </div>
                     ) : null;
                   })()}
@@ -267,9 +272,9 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
                     const ts = fmtTimestamp(data.anchoredAt);
                     return ts ? (
                       <div className="space-y-0.5">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Anchored At</p>
-                        <p className="text-gray-800">{ts.local}</p>
-                        <p className="text-gray-500 text-xs font-mono">{ts.utc}</p>
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Anchored At</p>
+                        <p className="text-slate-800">{ts.local}</p>
+                        <p className="font-mono text-xs text-slate-500">{ts.utc}</p>
                       </div>
                     ) : null;
                   })()}
@@ -279,9 +284,9 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
                     const ts = fmtTimestamp(data.ledgerCloseTime);
                     return ts ? (
                       <div className="space-y-0.5">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Ledger Closed At</p>
-                        <p className="text-gray-800">{ts.local}</p>
-                        <p className="text-gray-500 text-xs font-mono">{ts.utc}</p>
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Ledger Closed At</p>
+                        <p className="text-slate-800">{ts.local}</p>
+                        <p className="font-mono text-xs text-slate-500">{ts.utc}</p>
                       </div>
                     ) : null;
                   })()}
@@ -289,26 +294,26 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
                   {/* Stored hash */}
                   {data.storedHash && (
                     <div className="space-y-0.5">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Record Hash</p>
-                      <p className="font-mono text-xs text-gray-700 break-all">{data.storedHash}</p>
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Record Hash</p>
+                      <p className="break-all font-mono text-xs text-slate-700">{data.storedHash}</p>
                     </div>
                   )}
 
                   {/* Audit ID */}
                   <div className="space-y-0.5">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Audit ID</p>
-                    <p className="font-mono text-xs text-gray-700 break-all">{data.auditId}</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Audit ID</p>
+                    <p className="break-all font-mono text-xs text-slate-700">{data.auditId}</p>
                   </div>
 
                   {/* Stellar TX link */}
                   {data.stellarTxHash && data.stellarExplorerUrl && (
                     <div className="space-y-0.5">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Stellar Transaction</p>
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Stellar Transaction</p>
                       <a
                         href={data.stellarExplorerUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-mono text-xs text-blue-600 hover:underline break-all"
+                        className="break-all font-mono text-xs text-blue-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                       >
                         {data.stellarTxHash}
                       </a>
@@ -319,31 +324,37 @@ export function ChatAuditDialog({ auditId, initialDbStatus, asNavButton }: Props
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-3 border-t border-gray-100 flex flex-wrap gap-2 justify-between items-center">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-5 py-4">
               <div className="flex gap-2">
-                <button
+                <Button
+                  type="button"
                   onClick={load}
                   disabled={loading || retryPending}
-                  className="text-xs px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  size="sm"
+                  variant="secondary"
                 >
                   {loading ? "Refreshing…" : "Refresh"}
-                </button>
+                </Button>
                 {canRetry && (
-                  <button
+                  <Button
+                    type="button"
                     onClick={handleRetry}
                     disabled={loading || retryPending}
-                    className="text-xs px-3 py-1.5 bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    size="sm"
+                    variant="warning"
                   >
                     {retryPending ? "Retrying…" : "Retry Stellar Anchor"}
-                  </button>
+                  </Button>
                 )}
               </div>
-              <button
+              <Button
+                type="button"
                 onClick={handleClose}
-                className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                size="sm"
+                variant="subtle"
               >
                 Close
-              </button>
+              </Button>
             </div>
           </div>
         </div>
