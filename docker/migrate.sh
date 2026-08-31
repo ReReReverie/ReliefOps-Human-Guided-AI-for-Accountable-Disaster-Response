@@ -1,4 +1,5 @@
 #!/bin/sh
+# Keep LF endings: this script is bind-mounted into an Alpine container.
 set -eu
 
 echo "Waiting for PostgreSQL at ${PGHOST}:${PGPORT:-5432}..."

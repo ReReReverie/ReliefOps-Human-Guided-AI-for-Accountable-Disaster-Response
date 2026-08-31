@@ -1066,6 +1066,11 @@ describe("Unit: AI failure saves reporter message and returns deterministic fail
 // ---------------------------------------------------------------------------
 
 describe("OllamaAiProvider model-output regressions", () => {
+  const operatorMessage = JSON.stringify({
+    assistantMessage:
+      "I’ve saved this report and flagged it for urgent human review. Is the bleeding controlled? Is there another safe exit available?",
+  });
+
   it("retries a truncated first response and validates the repaired payload", async () => {
     const { OllamaAiProvider } = await import("@/features/ai/ollama");
     const provider = new OllamaAiProvider();
@@ -1082,14 +1087,15 @@ describe("OllamaAiProvider model-output regressions", () => {
     const callOllama = vi
       .fn()
       .mockResolvedValueOnce('{"assistantMessage":"truncated')
-      .mockResolvedValueOnce(JSON.stringify(repairedPayload));
+      .mockResolvedValueOnce(JSON.stringify(repairedPayload))
+      .mockResolvedValueOnce(operatorMessage);
 
     // @ts-expect-error accessing private method for deterministic transport mocking
     provider._callOllama = callOllama;
 
     const result = await provider.analyzeIntake(SYNTHETIC_FLOOD_INPUT);
 
-    expect(callOllama).toHaveBeenCalledTimes(2);
+    expect(callOllama).toHaveBeenCalledTimes(3);
     expect(callOllama.mock.calls[1]?.[0]).toContain("Invalid JSON");
     expect(callOllama.mock.calls[1]?.[0]).toContain("Required schema");
     expect(result.communicationSignals.uppercaseLetterRatio).toBe(
@@ -1128,7 +1134,8 @@ describe("OllamaAiProvider model-output regressions", () => {
 
     const callOllama = vi
       .fn()
-      .mockResolvedValue(JSON.stringify(malformedPayload));
+      .mockResolvedValueOnce(JSON.stringify(malformedPayload))
+      .mockResolvedValueOnce(operatorMessage);
     // @ts-expect-error accessing private method for deterministic transport mocking
     provider._callOllama = callOllama;
 
@@ -1170,13 +1177,14 @@ describe("OllamaAiProvider model-output regressions", () => {
 
     const callOllama = vi
       .fn()
-      .mockResolvedValue(JSON.stringify(malformedPayload));
+      .mockResolvedValueOnce(JSON.stringify(malformedPayload))
+      .mockResolvedValueOnce(operatorMessage);
     // @ts-expect-error accessing private method for deterministic transport mocking
     provider._callOllama = callOllama;
 
     const result = await provider.analyzeIntake(SYNTHETIC_FLOOD_INPUT);
 
-    expect(callOllama).toHaveBeenCalledTimes(1);
+    expect(callOllama).toHaveBeenCalledTimes(2);
     expect(result.communicationSignals.uppercaseLetterRatio).toBe(
       SYNTHETIC_FLOOD_INPUT.latestMessageStyle.uppercaseLetterRatio
     );

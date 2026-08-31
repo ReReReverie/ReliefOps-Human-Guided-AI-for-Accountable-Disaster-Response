@@ -20,6 +20,12 @@ const TURN_THREE_ANSWER =
 const TURN_FOUR_REPORT = "The water is still rising.";
 const REPEATED_SAFETY_MESSAGE =
   "Your report was saved and flagged for urgent human review. Is the bleeding controlled? Is there another safe exit?";
+const GENERATED_CALLER_IDENTITY_MESSAGE =
+  "Thank you, I’ve added that safety update. Your report remains saved and flagged for urgent human review. What fictional name may I use for you, and are you the person affected, a nearby witness, family or caregiver, or someone else?";
+const GENERATED_CALLER_LOCATION_MESSAGE =
+  "Thanks, Scout. Your report remains saved and flagged for urgent human review. What general simulation area or landmark are you reporting from, if it differs from the incident site?";
+const GENERATED_CALLER_COMPLETE_MESSAGE =
+  "Thank you, Scout. I’ve added those caller details; the report remains saved and flagged for urgent human review.";
 
 const REPORTER_RELATIONSHIPS = [
   "SELF",
@@ -241,8 +247,7 @@ describe("reporter chatter facts", () => {
       { immediateDanger: true },
       {
         missingFields: ["reporterAlias", "reporterRelationship"],
-        assistantMessage:
-          "Your report was saved and flagged for urgent human review. If it is safe, what fictional alias should we use for you, and what is your relationship to the victim? Choose SELF, NEARBY_WITNESS, FAMILY_OR_CAREGIVER, or OTHER.",
+        assistantMessage: GENERATED_CALLER_IDENTITY_MESSAGE,
       }
     );
     const turnThreePayload = makeAnalysis(
@@ -252,8 +257,7 @@ describe("reporter chatter facts", () => {
         reporterLocationDescription: "Demo Riverside Road District",
       },
       {
-        assistantMessage:
-          "Your report was saved and flagged for urgent human review. Is the water still rising?",
+        assistantMessage: GENERATED_CALLER_COMPLETE_MESSAGE,
       }
     );
     const turnFourPayload = makeAnalysis(
@@ -303,8 +307,13 @@ describe("reporter chatter facts", () => {
     );
     expect(turnTwo.readyForHumanReview).toBe(true);
     expect(turnTwo.urgency?.suggestedLevel).toBe("CRITICAL");
-    expect(questionText(turnTwo.assistantMessage)).toMatch(/fictional alias/);
-    expect(questionText(turnTwo.assistantMessage)).toMatch(/relationship/);
+    expect(questionText(turnTwo.assistantMessage)).toMatch(/fictional name/);
+    expect(questionText(turnTwo.assistantMessage)).toMatch(
+      /affected person|nearby witness|family|caregiver/
+    );
+    expect(turnTwo.assistantMessage).not.toMatch(
+      /SELF|NEARBY_WITNESS|FAMILY_OR_CAREGIVER|OTHER/
+    );
     expect(questionText(turnTwo.assistantMessage)).not.toMatch(
       /reporter\s+(?:location|where)|location description|where are you/
     );
@@ -374,7 +383,7 @@ describe("reporter chatter facts", () => {
     expect(turnFourPrompt).toContain(TURN_ONE_REPORT);
   });
 
-  it("overrides a repeated safety response with the approved chatter request without changing analysis facts", async () => {
+  it("regenerates a repeated safety response as a natural caller-detail question without changing analysis facts", async () => {
     const provider = new OllamaAiProvider();
     const modelOutput = makeAnalysis(
       {
@@ -390,7 +399,12 @@ describe("reporter chatter facts", () => {
         missingFields: ["reporterAlias", "reporterRelationship"],
       }
     );
-    const callOllama = vi.fn().mockResolvedValue(JSON.stringify(modelOutput));
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce(JSON.stringify(modelOutput))
+      .mockResolvedValueOnce(
+        JSON.stringify({ assistantMessage: GENERATED_CALLER_IDENTITY_MESSAGE })
+      );
 
     // @ts-expect-error accessing private method for deterministic transport mocking
     provider._callOllama = callOllama;
@@ -416,14 +430,11 @@ describe("reporter chatter facts", () => {
     );
     const result = await provider.analyzeIntake(input);
 
-    expect(result.assistantMessage).toMatch(
-      /fictional\s+(?:chatter\s+)?alias/i
-    );
-    expect(result.assistantMessage).toMatch(
-      /relationship.*(?:SELF|NEARBY_WITNESS|FAMILY_OR_CAREGIVER|OTHER)/i
-    );
-    expect(result.assistantMessage).toMatch(
-      /saved and flagged for urgent human review/i
+    expect(result.assistantMessage).toBe(GENERATED_CALLER_IDENTITY_MESSAGE);
+    expect(result.assistantMessage).toMatch(/fictional name/i);
+    expect(result.assistantMessage).toMatch(/nearby witness|family|caregiver/i);
+    expect(result.assistantMessage).not.toMatch(
+      /SELF|NEARBY_WITNESS|FAMILY_OR_CAREGIVER|OTHER/
     );
     expect(questionText(result.assistantMessage)).not.toMatch(
       /bleeding|safe\s+exit|injur(?:y|ies)|water|route|access/
@@ -435,6 +446,127 @@ describe("reporter chatter facts", () => {
     expect(result.readyForHumanReview).toBe(modelOutput.readyForHumanReview);
     expect(result.missingFields).toEqual(modelOutput.missingFields);
     expect(result.proposedTasks).toEqual(modelOutput.proposedTasks);
+    expect(callOllama).toHaveBeenCalledTimes(2);
+    expect(callOllama.mock.calls[1]?.[0]).toContain(
+      '"phase": "CALLER_IDENTITY"'
+    );
+    expect(callOllama.mock.calls[1]?.[2]).toMatchObject({
+      schemaName: "reliefops_operator_message",
+    });
+  });
+
+  it("advances after an urgent safety reply even when the first model turn omitted immediateDanger", async () => {
+    const provider = new OllamaAiProvider();
+    const priorReply =
+      "I’m sorry to hear about the fire and the injured person. Your report has been saved and flagged for urgent human review. Is the adult with burns breathing comfortably, and is there any safe way to reach them or provide assistance?";
+    const reporterAnswer =
+      "Yes, there is a window but it is caged. The roads here are clear.";
+    const modelOutput = makeAnalysis(
+      {
+        immediateDanger: true,
+        accessHazards: ["caged window"],
+      },
+      {
+        assistantMessage: priorReply,
+        missingFields: ["reporterAlias", "reporterRelationship"],
+      }
+    );
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce(JSON.stringify(modelOutput))
+      .mockResolvedValueOnce(
+        JSON.stringify({ assistantMessage: GENERATED_CALLER_IDENTITY_MESSAGE })
+      );
+
+    // @ts-expect-error accessing private method for deterministic transport mocking
+    provider._callOllama = callOllama;
+
+    const result = await provider.analyzeIntake(
+      makeInput(
+        {
+          incidentType: "Fire",
+          locationDescription: "Training Village West",
+          injuriesOrMedicalNeeds: "adult with burns and difficulty breathing",
+          accessHazards: ["front entrance blocked by flames"],
+        },
+        [
+          {
+            role: "REPORTER",
+            body: "There is an active fire with one adult still inside and an injured person outside.",
+          },
+          { role: "AI", body: priorReply },
+          { role: "REPORTER", body: reporterAnswer },
+        ],
+        reporterAnswer
+      )
+    );
+
+    const questions = questionText(result.assistantMessage);
+    expect(questions).toMatch(/fictional name/);
+    expect(questions).toMatch(/nearby witness|family|caregiver/);
+    expect(questions).not.toMatch(
+      /burns|breathing|safe way|reach|provide assistance/
+    );
+    expect(result.assistantMessage).not.toBe(priorReply);
+    assertNoSensitiveReporterRequest(result.assistantMessage);
+    expect(callOllama).toHaveBeenCalledTimes(2);
+  });
+
+  it("advances to the coarse caller location after the current result supplies alias and relationship", async () => {
+    const provider = new OllamaAiProvider();
+    const modelOutput = makeAnalysis(
+      {
+        reporterAlias: "Scout",
+        reporterRelationship: "NEARBY_WITNESS",
+        immediateDanger: true,
+      },
+      {
+        assistantMessage: `${REPEATED_SAFETY_MESSAGE} What fictional alias should we use, and what is your relationship to the victim?`,
+        missingFields: ["reporterLocationDescription"],
+      }
+    );
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce(JSON.stringify(modelOutput))
+      .mockResolvedValueOnce(
+        JSON.stringify({ assistantMessage: GENERATED_CALLER_LOCATION_MESSAGE })
+      );
+
+    // @ts-expect-error accessing private method for deterministic transport mocking
+    provider._callOllama = callOllama;
+
+    const input = makeInput(
+      {
+        victimName: "River",
+        locationDescription: "Simulation Block C",
+        peopleAffected: 5,
+        immediateDanger: true,
+        injuriesOrMedicalNeeds: "Bleeding is controlled",
+        accessHazards: ["There is another safe exit"],
+      },
+      [
+        { role: "REPORTER", body: TURN_ONE_REPORT },
+        {
+          role: "AI",
+          body: "Your report was saved and flagged for urgent human review. Is the bleeding controlled? Is there another safe exit?",
+        },
+        { role: "REPORTER", body: TURN_TWO_ANSWER },
+      ],
+      TURN_TWO_ANSWER
+    );
+    const result = await provider.analyzeIntake(input);
+
+    const questions = questionText(result.assistantMessage);
+    expect(questions).toMatch(/coarse synthetic area|landmark|reporting from/);
+    expect(questions).not.toMatch(
+      /fictional\s+(?:chatter\s+)?alias|relationship|bleeding|safe\s+exit|injur(?:y|ies)|water|route|access/
+    );
+    assertNoSensitiveReporterRequest(result.assistantMessage);
+    expect(result.factsPatch).toEqual(modelOutput.factsPatch);
+    expect(result.urgency).toEqual(modelOutput.urgency);
+    expect(result.readyForHumanReview).toBe(modelOutput.readyForHumanReview);
+    expect(result.assistantMessage).toBe(GENERATED_CALLER_LOCATION_MESSAGE);
+    expect(callOllama).toHaveBeenCalledTimes(2);
   });
 
   it("does not re-ask reporter facts already supplied in the current result", async () => {
@@ -453,7 +585,12 @@ describe("reporter chatter facts", () => {
         missingFields: [],
       }
     );
-    const callOllama = vi.fn().mockResolvedValue(JSON.stringify(modelOutput));
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce(JSON.stringify(modelOutput))
+      .mockResolvedValueOnce(
+        JSON.stringify({ assistantMessage: GENERATED_CALLER_COMPLETE_MESSAGE })
+      );
 
     // @ts-expect-error accessing private method for deterministic transport mocking
     provider._callOllama = callOllama;
@@ -486,5 +623,7 @@ describe("reporter chatter facts", () => {
     expect(result.factsPatch).toEqual(modelOutput.factsPatch);
     expect(result.urgency).toEqual(modelOutput.urgency);
     expect(result.readyForHumanReview).toBe(modelOutput.readyForHumanReview);
+    expect(result.assistantMessage).toBe(GENERATED_CALLER_COMPLETE_MESSAGE);
+    expect(callOllama).toHaveBeenCalledTimes(2);
   });
 });
