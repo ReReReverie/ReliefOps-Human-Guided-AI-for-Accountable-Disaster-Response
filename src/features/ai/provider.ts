@@ -21,9 +21,55 @@ export type MessageStyleSignals = {
 // CaseFactsPatch — allowed structured fact updates
 // ---------------------------------------------------------------------------
 
+/**
+ * Demo-only victim labels are deliberately narrower than arbitrary free text:
+ * they are fictional aliases, not an identity or contact field.
+ */
+export const VictimNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(40)
+  .regex(/^[A-Za-z][A-Za-z .'-]*$/);
+
+/** Reporter chatter is intentionally limited to a small, non-identifying relationship vocabulary. */
+export const ReporterRelationshipSchema = z.enum([
+  "SELF",
+  "NEARBY_WITNESS",
+  "FAMILY_OR_CAREGIVER",
+  "OTHER",
+]);
+
+export type ReporterRelationship = z.infer<typeof ReporterRelationshipSchema>;
+
+/** Keep the location field coarse and synthetic; reject recognizable precise locations. */
+export const CoarseSyntheticLocationSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9 .,'()_-]*$/)
+  .refine(
+    (value) =>
+      !/(?:https?:\/\/|www\.)/i.test(value) &&
+      !/(?:[-+]?\d{1,3}(?:\.\d+)?\s*[,;]\s*[-+]?\d{1,3}(?:\.\d+)?|\b[NS]\s*[-+]?\d{1,3}(?:\.\d+)?\s+[EW]\s*[-+]?\d{1,3}(?:\.\d+)?\b)/i.test(
+        value
+      ) &&
+      !/\b\d{1,6}(?:-\d{1,6})?\s+[A-Za-z0-9][A-Za-z0-9.'-]*(?:\s+[A-Za-z0-9][A-Za-z0-9.'-]*){0,3}\s+(?:street|st\.?|avenue|ave\.?|road|rd\.?|boulevard|blvd\.?|drive|dr\.?|lane|ln\.?|route|rt\.?|highway|hwy\.?)\b/i.test(
+        value
+      )
+  );
+
 export type CaseFactsPatch = {
   incidentType?: string | null;
   locationDescription?: string | null;
+  /** Optional fictional name or alias; never a real/legal identity. */
+  victimName?: string | null;
+  /** Optional fictional chatter label; never a real/legal identity. */
+  reporterAlias?: string | null;
+  reporterRelationship?: ReporterRelationship | null;
+  /** Optional coarse synthetic chatter location; never a precise/live location. */
+  reporterLocationDescription?: string | null;
   peopleAffected?: number | null;
   peopleAffectedUnknown?: boolean;
   immediateDanger?: boolean | null;
@@ -55,7 +101,12 @@ export type IntakeInput = {
 const CaseFactsPatchSchema = z
   .object({
     incidentType: z.string().nullable().optional(),
-    locationDescription: z.string().nullable().optional(),
+    locationDescription: CoarseSyntheticLocationSchema.nullable().optional(),
+    victimName: VictimNameSchema.nullable().optional(),
+    reporterAlias: VictimNameSchema.nullable().optional(),
+    reporterRelationship: ReporterRelationshipSchema.nullable().optional(),
+    reporterLocationDescription:
+      CoarseSyntheticLocationSchema.nullable().optional(),
     peopleAffected: z.number().int().nonnegative().nullable().optional(),
     peopleAffectedUnknown: z.boolean().optional(),
     immediateDanger: z.boolean().nullable().optional(),
@@ -71,6 +122,10 @@ const CaseFactsPatchSchema = z
 const MissingFieldSchema = z.enum([
   "incidentType",
   "locationDescription",
+  "victimName",
+  "reporterAlias",
+  "reporterRelationship",
+  "reporterLocationDescription",
   "peopleAffected",
   "immediateDanger",
   "injuriesOrMedicalNeeds",

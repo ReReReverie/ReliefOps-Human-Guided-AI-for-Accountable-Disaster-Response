@@ -24,7 +24,7 @@ export function createAiProvider(): ReliefAiProvider {
   return new OllamaAiProvider({
     baseUrl: process.env["AI_BASE_URL"] ?? "http://127.0.0.1:11434/v1",
     model: process.env["AI_MODEL"] ?? "granite4.1:3b",
-    maxTokens: Number(process.env["AI_MAX_OUTPUT_TOKENS"] ?? "600"),
+    maxTokens: Number(process.env["AI_MAX_OUTPUT_TOKENS"] ?? "1200"),
     contextLength: Number(process.env["AI_CONTEXT_LENGTH"] ?? "4096"),
   });
 }

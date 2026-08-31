@@ -26,7 +26,7 @@ const serverSchema = z.object({
   AI_BASE_URL: z.string().url().default("http://127.0.0.1:11434/v1"),
   AI_MODEL: z.string().default("granite4.1:3b"),
   AI_CONTEXT_LENGTH: z.coerce.number().int().positive().default(4096),
-  AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(600),
+  AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(1200),
   AI_CONCURRENCY: z.coerce.number().int().positive().default(1),
 
   // Stellar

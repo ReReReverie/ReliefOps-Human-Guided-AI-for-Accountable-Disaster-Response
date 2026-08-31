@@ -156,9 +156,19 @@ function MessageBubble({
 }
 
 // Confirmed facts display
+const REPORTER_FACT_KEYS = new Set([
+  "reporterAlias",
+  "reporterRelationship",
+  "reporterLocationDescription",
+]);
+
 function FactsDisplay({ facts }: { facts: CaseFactsPatch }) {
   const entries = Object.entries(facts).filter(
-    ([, v]) => v !== null && v !== undefined && v !== false
+    ([key, v]) =>
+      !REPORTER_FACT_KEYS.has(key) &&
+      v !== null &&
+      v !== undefined &&
+      v !== false
   );
 
   if (entries.length === 0) {
@@ -167,7 +177,8 @@ function FactsDisplay({ facts }: { facts: CaseFactsPatch }) {
 
   const LABELS: Record<string, string> = {
     incidentType: "Incident Type",
-    locationDescription: "Location",
+    locationDescription: "Synthetic / Coarse Location",
+    victimName: "Victim Alias (Fictional Demo Only)",
     peopleAffected: "People Affected",
     peopleAffectedUnknown: "People Affected",
     immediateDanger: "Immediate Danger",
@@ -200,6 +211,68 @@ function FactsDisplay({ facts }: { facts: CaseFactsPatch }) {
         );
       })}
     </dl>
+  );
+}
+
+function readFirstStringFact(
+  facts: CaseFactsPatch,
+  keys: string[]
+): string | null {
+  const rawFacts = facts as Record<string, unknown>;
+  for (const key of keys) {
+    const value = rawFacts[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
+// Chatter metadata is presented separately from victim and incident facts so
+// coordinators do not confuse the person communicating with the victim.
+function ChatterDetailsDisplay({ facts }: { facts: CaseFactsPatch }) {
+  const fields = [
+    {
+      label: "Chatter Alias (Fictional Demo Only)",
+      value: readFirstStringFact(facts, ["reporterAlias"]),
+    },
+    {
+      label: "Chatter Relationship",
+      value: readFirstStringFact(facts, ["reporterRelationship"]),
+    },
+    {
+      label: "Chatter Synthetic / Coarse Location",
+      value: readFirstStringFact(facts, ["reporterLocationDescription"]),
+    },
+  ].filter((field): field is { label: string; value: string } => field.value !== null);
+
+  if (fields.length === 0) return null;
+
+  return (
+    <div className="mt-5 border-t border-slate-200 pt-5">
+      <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+        Chatter details
+      </p>
+      <p className="mb-4 text-xs leading-5 text-slate-500">
+        The chatter is the person communicating with the coordinator. Use only
+        the fictional alias and synthetic/coarse location provided for this demo.
+      </p>
+      <dl className="grid gap-3 sm:grid-cols-2">
+        {fields.map((field) => (
+          <div
+            key={field.label}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5"
+          >
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {field.label}
+            </dt>
+            <dd className="mt-1 break-words text-sm text-slate-900">
+              {field.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 
@@ -498,7 +571,9 @@ export default async function CaseDetailPage({
               <SectionHeader title="Confirmed facts and AI signals" />
               <div>
                 <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500"><CheckCircle2 aria-hidden="true" size={15} /> Confirmed facts</p>
+                <p className="mb-4 text-xs leading-5 text-slate-500">Victim and chatter aliases are fictional demo labels. Incident and chatter locations are synthetic and coarse.</p>
                 <FactsDisplay facts={facts} />
+                <ChatterDetailsDisplay facts={facts} />
               </div>
               {latestAiAssessment ? <div className="mt-6 border-t border-slate-200 pt-5"><p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500"><Bot aria-hidden="true" size={15} /> AI urgency breakdown</p><AiUrgencyDisplay assessment={latestAiAssessment} /></div> : null}
               {aiMetadata ? <div className="mt-6 border-t border-slate-200 pt-5"><CommunicationCuesDisplay aiMetadata={aiMetadata} /></div> : null}

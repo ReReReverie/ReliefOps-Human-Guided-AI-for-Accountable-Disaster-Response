@@ -71,6 +71,9 @@ Use [docs/implementation-plan-lean-mvp.md](docs/implementation-plan-lean-mvp.md)
 - A coordinator can take over a chatbot conversation at any time.
 - The AI must not send messages while a human controls the conversation.
 - Messages, names, contacts, locations, explanations, and task details remain off-chain.
+- Synthetic demonstrations may include an optional fictional victim alias (`victimName`) and a coarse synthetic location label (for example, `Simulation Block C`) in coordinator-facing facts. These are not identity or location verification: never use legal/real names, phone numbers, email addresses, URLs, street addresses, GPS coordinates, or live location.
+- Reporter chatter is separate optional coordinator-facing metadata: a fictional `reporterAlias`, one of `SELF`, `NEARBY_WITNESS`, `FAMILY_OR_CAREGIVER`, or `OTHER` as `reporterRelationship`, and (only when useful) a coarse synthetic `reporterLocationDescription`. Never merge reporter chatter into victim facts, and never collect real/legal names, phone/email/URL identifiers, exact addresses, GPS coordinates, or live location.
+- Immediate-danger conversations are safety-first: the first turn asks focused safety questions, and a later turn may ask for the reporter alias and relationship (plus a coarse reporter location only when useful and missing). Chatter is optional; supplied fields persist and missing chatter never delays `CRITICAL` readiness or urgent human review.
 - Stellar stores only one salted SHA-256 `CHAT_STARTED` commitment per conversation session.
 - A failure in AI or Stellar must never discard or block a relief request.
 
@@ -81,6 +84,8 @@ IBM Granite is used for bounded decision support rather than autonomous control.
 The live AI runs locally through Ollama using `granite4.1:3b`. A deterministic mock provider uses the same schema so teammates can develop and test without running the model and so the Vercel deployment can provide a clearly labelled interface preview. The recorded prototype demonstration must use the real Ollama provider.
 
 The chatbot's prompts, allowed facts, output contract, urgency rubric, takeover rules, failure behavior, and synthetic acceptance scenarios are defined in [docs/chatbot-specification.md](docs/chatbot-specification.md). IBM Bob must implement that contract without expanding its scope.
+
+Reporter-facing behavior is intentionally bounded: the assistant asks no more than two focused follow-up questions, prioritizes safety-relevant missing facts, and does not repeat a confirmed question. When immediate danger is reported, it reassures the reporter that the report was saved and flagged for urgent human review; this is not a promise that help has been dispatched, is on the way, or will arrive by a particular time. The prototype never asks for real names, phone numbers, email addresses, exact addresses, GPS coordinates, or live location. An optional fictional victim alias and coarse incident label can be supplied for a demo; separate reporter chatter (`reporterAlias`, `reporterRelationship`, and an optional coarse `reporterLocationDescription`) can be supplied after safety questions. Missing optional metadata never blocks `CRITICAL` readiness, supplied facts persist, and known victim/reporter values are not re-asked.
 
 ```text
 Public preview:
@@ -227,6 +232,17 @@ clients, but a legacy cookie can associate only the one case it proves and
 cannot extend its existing expiry. Case UUIDs, public references, browser
 storage, and a Docker volume are not authorization credentials.
 
+Coordinator-facing confirmed facts may include the optional fictional
+`victimName` alias and coarse `locationDescription`, plus separate reporter
+chatter fields: `reporterAlias`, `reporterRelationship`, and an optional coarse
+`reporterLocationDescription`. They remain off-chain structured demo metadata;
+reporter history and raw transcript messages remain unchanged and are never
+rewritten or backfilled when optional victim or chatter fields are added.
+Existing cases may legitimately have none of these fields. Reporter aliases
+are fictional only, relationships use the bounded enum documented above, and
+location labels must remain coarse and synthetic; never use real/legal names,
+phone/email identifiers, exact addresses, GPS coordinates, or live location.
+
 This prototype has no reporter account, recovery secret, cross-device access,
 or account recovery flow. Losing or clearing the workspace cookie, reaching
 the 10-hour deadline, revoking the workspace, pruning the PostgreSQL volume,
@@ -291,7 +307,7 @@ AI_PROVIDER=ollama
 AI_BASE_URL=http://127.0.0.1:11434/v1
 AI_MODEL=granite4.1:3b
 AI_CONTEXT_LENGTH=4096
-AI_MAX_OUTPUT_TOKENS=600
+AI_MAX_OUTPUT_TOKENS=1200
 AI_CONCURRENCY=1
 ```
 
@@ -452,7 +468,7 @@ GPT-5.6 Sol with Max reasoning created the implementation plans, lean MVP scope,
 
 IBM Bob was the primary implementation tool. Its manager delegated the six lean-MVP phases to worker subagents. The phase record in `docs/bob-development-log.md` contains Bob's reported worker assignments, implementation notes, commands, and validation results across the scaffold, Neon data/auth, Ollama/Granite chatbot, coordinator workflow, Stellar Testnet anchoring, and finalization. It is a record of reported work, not independent tool-level authorship proof.
 
-After IBM Bob's 40 free tokens were exhausted, Codex with GPT-5.6 Luna Max workers was used only to update this README. Codex did not implement application features; those remained IBM Bob's work.
+After IBM Bob's 40 free tokens were exhausted, the user requested a focused Codex/GPT-5.6 Luna hardening pass on the existing implementation. That pass updated the configured Ollama budget to 1200 tokens, strengthened structured JSON/schema-repair handling, verified deterministic communication-signal processing, and added regression coverage; it did not replace Bob's primary implementation of the application features.
 
 The current validation status is summarized above; the Bob log retains the phase-level commands and reported results.
 

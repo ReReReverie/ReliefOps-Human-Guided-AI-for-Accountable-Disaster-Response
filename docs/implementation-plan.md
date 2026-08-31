@@ -445,7 +445,7 @@ Implement:
 ```text
 Model: granite4.1:3b
 Context: 4096 tokens
-Maximum generated output: 600 tokens
+Maximum generated output: 1200 tokens
 Maximum loaded models: 1
 Parallel requests: 1
 Application AI concurrency: 1
@@ -733,7 +733,7 @@ AI_PROVIDER=ollama
 AI_BASE_URL=http://127.0.0.1:11434/v1
 AI_MODEL=granite4.1:3b
 AI_CONTEXT_LENGTH=4096
-AI_MAX_OUTPUT_TOKENS=600
+AI_MAX_OUTPUT_TOKENS=1200
 AI_CONCURRENCY=1
 
 STELLAR_NETWORK=testnet

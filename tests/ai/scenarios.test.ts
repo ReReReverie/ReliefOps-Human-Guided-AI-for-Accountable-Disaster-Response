@@ -20,9 +20,97 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { computeMessageStyle } from "@/features/ai/capitalization";
-import { IntakeAnalysisSchema } from "@/features/ai/provider";
+import {
+  IntakeAnalysisSchema,
+  type IntakeInput,
+} from "@/features/ai/provider";
 import { MockAiProvider, MOCK_FIXTURES } from "@/features/ai/mock";
 import { FAILURE_MESSAGE } from "@/features/chat/service";
+
+const SYNTHETIC_FLOOD_MESSAGE =
+  "I am trapped with four other people on the second floor of a house in Simulation Block C. The floodwater is rising quickly and has reached the stairs. One person has a bleeding leg injury, and an elderly adult is with us. The road outside is flooded and cannot be used.";
+
+const SYNTHETIC_FLOOD_INPUT: IntakeInput = {
+  confirmedFacts: {},
+  publicMessages: [
+    {
+      role: "REPORTER",
+      body: SYNTHETIC_FLOOD_MESSAGE,
+    },
+  ],
+  latestMessageStyle: computeMessageStyle(SYNTHETIC_FLOOD_MESSAGE),
+};
+
+type ImmediateDangerMessageOptions = {
+  missingFields?: readonly string[];
+  confirmedLocation?: boolean;
+  confirmedPeopleAffected?: boolean;
+};
+
+function questionText(message: string): string {
+  return message
+    .split(/(?<=\?)\s+/)
+    .filter((part) => part.includes("?"))
+    .join(" ")
+    .toLowerCase();
+}
+
+function assertImmediateDangerAssistantMessage(
+  message: string,
+  options: ImmediateDangerMessageOptions = {}
+): void {
+  const normalized = message.toLowerCase();
+  const questions = questionText(message);
+
+  // The model may say "saved", "flagged", or "flagging", but must identify the review
+  // handoff as urgent/immediate human review rather than promise a response.
+  expect(normalized).toMatch(/\b(?:saved|flagged|flagging)\b/);
+  expect(normalized).toMatch(
+    /\b(?:urgent|immediate)\b[\s\S]{0,80}\bhuman review\b/
+  );
+
+  // Reporter contact details are intentionally outside this prototype's scope.
+  expect(normalized).not.toMatch(
+    /\b(?:what(?:\s+is|'s)?|provide|share|send|give|tell me|confirm|may i have)\b[^?.!]{0,80}\b(?:real|full|legal)?\s*name\b/
+  );
+  expect(normalized).not.toMatch(
+    /\b(?:what(?:\s+is|'s)?|provide|share|send|give|tell me|confirm|may i have)\b[^?.!]{0,80}\b(?:phone|telephone|mobile)(?:\s+number)?\b/
+  );
+
+  // These are prohibited promises or claims of operational action.
+  expect(normalized).not.toMatch(
+    /\b(?:help|assistance|responders?|emergency services?|support)\b[\s\S]{0,80}\b(?:on the way|dispatched|sent|assigned|arriving)\b|\b(?:on the way|dispatched|sent|assigned|arriving)\b[\s\S]{0,80}\b(?:help|assistance|responders?|emergency services?|support)\b/
+  );
+
+  const missingFields = options.missingFields ?? [];
+  const importantFieldMissing = missingFields.some((field) =>
+    [
+      "incidentType",
+      "locationDescription",
+      "peopleAffected",
+      "immediateDanger",
+      "injuriesOrMedicalNeeds",
+      "vulnerablePeople",
+      "essentialNeeds",
+      "accessHazards",
+    ].includes(field)
+  );
+  if (importantFieldMissing) {
+    expect(questions).toContain("?");
+    expect(questions).toMatch(
+      /location|district|landmark|where|how many|number of people|people affected|injur|bleed|medical|safe|exit|route|road|access|water|food|shelter|elderly|child|vulnerab|need/
+    );
+  }
+
+  if (options.confirmedLocation) {
+    expect(questions).not.toMatch(/location|district|landmark|where/);
+  }
+  if (options.confirmedPeopleAffected) {
+    expect(questions).not.toMatch(
+      /how many|number of people|people affected|count/
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Unit tests: computeMessageStyle (capitalization)
@@ -355,6 +443,18 @@ describe("Scenario A: Immediate danger", () => {
   it("Scenario A assistantMessage does not promise dispatch or rescue", () => {
     const msg = MOCK_FIXTURES["A"].assistantMessage.toLowerCase();
     expect(msg).not.toMatch(/dispatch|responder.* sent|help is on the way|sent.*help/);
+  });
+
+  it("Scenario A assistantMessage gives truthful urgent-review reassurance", () => {
+    assertImmediateDangerAssistantMessage(MOCK_FIXTURES["A"].assistantMessage);
+  });
+
+  it("Scenario A does not repeat confirmed location or people-count questions", () => {
+    const questions = questionText(MOCK_FIXTURES["A"].assistantMessage);
+    expect(questions).not.toMatch(/location|district|landmark|where/);
+    expect(questions).not.toMatch(
+      /how many|number of people|people affected|count/
+    );
   });
 
   it("Scenario A factsPatch has immediateDanger=true", () => {
@@ -852,6 +952,12 @@ describe("Scenario L: Ambiguous possible correction", () => {
     expect(msg).toMatch(/tree|three|clarif/);
   });
 
+  it("Scenario L asks a relevant question without unsafe promises or PII requests", () => {
+    assertImmediateDangerAssistantMessage(MOCK_FIXTURES["L"].assistantMessage, {
+      missingFields: MOCK_FIXTURES["L"].missingFields,
+    });
+  });
+
   it("Scenario L fixture passes IntakeAnalysisSchema", () => {
     const fixture = {
       ...MOCK_FIXTURES["L"],
@@ -952,5 +1058,130 @@ describe("Unit: AI failure saves reporter message and returns deterministic fail
       }
       expect(result.success, `Fixture ${id} must pass schema`).toBe(true);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Unit tests: Granite/Ollama output regressions
+// ---------------------------------------------------------------------------
+
+describe("OllamaAiProvider model-output regressions", () => {
+  it("retries a truncated first response and validates the repaired payload", async () => {
+    const { OllamaAiProvider } = await import("@/features/ai/ollama");
+    const provider = new OllamaAiProvider();
+    const repairedPayload = {
+      ...MOCK_FIXTURES.A,
+      communicationSignals: {
+        ...MOCK_FIXTURES.A.communicationSignals,
+        // The provider must replace model-provided values with the
+        // application-calculated signals before returning the result.
+        uppercaseLetterRatio: 0,
+        uppercaseEmphasis: "NONE" as const,
+      },
+    };
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce('{"assistantMessage":"truncated')
+      .mockResolvedValueOnce(JSON.stringify(repairedPayload));
+
+    // @ts-expect-error accessing private method for deterministic transport mocking
+    provider._callOllama = callOllama;
+
+    const result = await provider.analyzeIntake(SYNTHETIC_FLOOD_INPUT);
+
+    expect(callOllama).toHaveBeenCalledTimes(2);
+    expect(callOllama.mock.calls[1]?.[0]).toContain("Invalid JSON");
+    expect(callOllama.mock.calls[1]?.[0]).toContain("Required schema");
+    expect(result.communicationSignals.uppercaseLetterRatio).toBe(
+      SYNTHETIC_FLOOD_INPUT.latestMessageStyle.uppercaseLetterRatio
+    );
+    expect(result.communicationSignals.uppercaseEmphasis).toBe(
+      SYNTHETIC_FLOOD_INPUT.latestMessageStyle.uppercaseEmphasis
+    );
+  });
+
+  it("rejects an unknown field nested inside factsPatch after repair", async () => {
+    const { OllamaAiProvider } = await import("@/features/ai/ollama");
+    const provider = new OllamaAiProvider();
+    const malformedPayload = {
+      ...MOCK_FIXTURES.A,
+      factsPatch: {
+        ...MOCK_FIXTURES.A.factsPatch,
+        // missingFields belongs at the top level, not inside factsPatch.
+        missingFields: ["locationDescription"],
+      },
+    };
+    const schemaResult = IntakeAnalysisSchema.safeParse(malformedPayload);
+
+    expect(schemaResult.success).toBe(false);
+    if (!schemaResult.success) {
+      expect(
+        schemaResult.error.issues.some(
+          (issue) =>
+            issue.code === "unrecognized_keys" &&
+            issue.path.join(".") === "factsPatch"
+        )
+      ).toBe(true);
+      expect(schemaResult.error.issues.map((issue) => issue.message).join("; "))
+        .toContain("missingFields");
+    }
+
+    const callOllama = vi
+      .fn()
+      .mockResolvedValue(JSON.stringify(malformedPayload));
+    // @ts-expect-error accessing private method for deterministic transport mocking
+    provider._callOllama = callOllama;
+
+    await expect(
+      provider.analyzeIntake(SYNTHETIC_FLOOD_INPUT)
+    ).rejects.toMatchObject({ code: "SCHEMA_VALIDATION_FAILED" });
+
+    expect(callOllama).toHaveBeenCalledTimes(2);
+    expect(callOllama.mock.calls[1]?.[0]).toContain("factsPatch");
+    expect(callOllama.mock.calls[1]?.[0]).toContain("missingFields");
+  });
+
+  it("fills missing deterministic communication fields before validation", async () => {
+    const { OllamaAiProvider } = await import("@/features/ai/ollama");
+    const provider = new OllamaAiProvider();
+    const {
+      uppercaseLetterRatio: _omittedUppercaseRatio,
+      uppercaseEmphasis: _omittedUppercaseEmphasis,
+      ...signalsWithoutDeterministicFields
+    } = MOCK_FIXTURES.A.communicationSignals;
+    const malformedPayload = {
+      ...MOCK_FIXTURES.A,
+      communicationSignals: signalsWithoutDeterministicFields,
+    };
+    const schemaResult = IntakeAnalysisSchema.safeParse(malformedPayload);
+
+    expect(schemaResult.success).toBe(false);
+    if (!schemaResult.success) {
+      const issuePaths = schemaResult.error.issues.map((issue) =>
+        issue.path.join(".")
+      );
+      expect(issuePaths).toEqual(
+        expect.arrayContaining([
+          "communicationSignals.uppercaseLetterRatio",
+          "communicationSignals.uppercaseEmphasis",
+        ])
+      );
+    }
+
+    const callOllama = vi
+      .fn()
+      .mockResolvedValue(JSON.stringify(malformedPayload));
+    // @ts-expect-error accessing private method for deterministic transport mocking
+    provider._callOllama = callOllama;
+
+    const result = await provider.analyzeIntake(SYNTHETIC_FLOOD_INPUT);
+
+    expect(callOllama).toHaveBeenCalledTimes(1);
+    expect(result.communicationSignals.uppercaseLetterRatio).toBe(
+      SYNTHETIC_FLOOD_INPUT.latestMessageStyle.uppercaseLetterRatio
+    );
+    expect(result.communicationSignals.uppercaseEmphasis).toBe(
+      SYNTHETIC_FLOOD_INPUT.latestMessageStyle.uppercaseEmphasis
+    );
   });
 });

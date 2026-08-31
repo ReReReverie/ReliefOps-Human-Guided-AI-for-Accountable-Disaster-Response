@@ -309,7 +309,7 @@ When intake is complete, return the urgency analysis and at most six proposed ta
 ```text
 Model: granite4.1:3b
 Context: 4096 tokens
-Maximum output: 600 tokens
+Maximum output: 1200 tokens
 Loaded models: 1
 Parallel AI requests: 1
 Temperature: 0
@@ -447,7 +447,7 @@ AI_PROVIDER=ollama
 AI_BASE_URL=http://127.0.0.1:11434/v1
 AI_MODEL=granite4.1:3b
 AI_CONTEXT_LENGTH=4096
-AI_MAX_OUTPUT_TOKENS=600
+AI_MAX_OUTPUT_TOKENS=1200
 AI_CONCURRENCY=1
 
 STELLAR_NETWORK=testnet

@@ -57,6 +57,7 @@ services:
       HOSTNAME: 0.0.0.0
       PORT: "3000"
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      AI_BASE_URL: ${DOCKER_AI_BASE_URL:-http://host.docker.internal:11434/v1}
       DATABASE_URL: postgresql://${POSTGRES_USER:-reliefops}:${POSTGRES_PASSWORD:-reliefops_dev}@db:5432/${POSTGRES_DB:-reliefops}
       DATABASE_URL_UNPOOLED: postgresql://${POSTGRES_USER:-reliefops}:${POSTGRES_PASSWORD:-reliefops_dev}@db:5432/${POSTGRES_DB:-reliefops}
     ports:
