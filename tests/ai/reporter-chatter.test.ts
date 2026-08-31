@@ -264,7 +264,7 @@ describe("reporter chatter facts", () => {
       { immediateDanger: true },
       {
         assistantMessage:
-          "Your report was saved and flagged for urgent human review. Is the bleeding still controlled?",
+          "Your report was saved and flagged for urgent human review. Is anyone now exposed to the rising water?",
       }
     );
     const callOllama = vi

@@ -42,6 +42,132 @@ export const SESSION_COOKIE_NAME = "reliefops_session";
 export const FAILURE_MESSAGE =
   "Your report was saved, but the AI assistant is temporarily unavailable. A human coordinator can still review the information you provided.";
 
+const STABLE_FACT_KEYS = new Set<keyof CaseFactsPatch>([
+  "incidentType",
+  "locationDescription",
+  "victimName",
+  "reporterAlias",
+  "reporterRelationship",
+  "reporterLocationDescription",
+  "peopleAffected",
+]);
+
+function normalizedFactText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function isReporterLocationMention(
+  latestBody: string,
+  normalizedCandidate: string
+): boolean {
+  const normalizedBody = normalizedFactText(latestBody);
+  const candidateIndex = normalizedBody.indexOf(normalizedCandidate);
+  if (candidateIndex < 0) return false;
+  const prefix = normalizedBody.slice(Math.max(0, candidateIndex - 120), candidateIndex);
+  return /(?:\b(?:my|our)\s+location\s+(?:is\s+)?|\b(?:i\s+am|i\s+m)\s+(?:(?:currently|located|standing|calling|reporting)\s+)?(?:at|in|near|from)\s+|\b(?:reporting|calling)\s+from\s+)$/i.test(
+    prefix
+  );
+}
+
+function explicitlyMentionsFact(
+  key: keyof CaseFactsPatch,
+  value: unknown,
+  latestBody: string
+): boolean {
+  const normalizedBody = normalizedFactText(latestBody);
+  if (typeof value === "string") {
+    const normalizedValue = normalizedFactText(value);
+    if (
+      normalizedValue &&
+      normalizedBody.includes(normalizedValue) &&
+      !(
+        key === "locationDescription" &&
+        isReporterLocationMention(latestBody, normalizedValue)
+      )
+    ) {
+      return true;
+    }
+  }
+
+  if (key === "reporterRelationship") {
+    const relationshipCues: Record<string, RegExp> = {
+      SELF: /\b(?:i|we)\s+(?:am|are)\s+(?:the\s+)?(?:victim|affected\s+person|person\s+needing\s+help)\b/i,
+      NEARBY_WITNESS: /\b(?:i|we)\s+(?:am|are)\s+(?:a\s+|the\s+|[A-Za-z][A-Za-z'’-]*['’]s\s+)?(?:nearby\s+)?(?:witness|neighbor|neighbour)\b/i,
+      FAMILY_OR_CAREGIVER: /\b(?:i|we)\s+(?:am|are)\s+(?:a\s+)?(?:family\s+member|caregiver|parent)\b/i,
+      OTHER: /\b(?:someone|somebody)\s+else\b|\bother\b/i,
+    };
+    return (
+      typeof value === "string" &&
+      Boolean(relationshipCues[value]?.test(latestBody))
+    );
+  }
+
+  if (key === "peopleAffected" && typeof value === "number") {
+    return new RegExp(`\\b${value}\\b`).test(latestBody);
+  }
+
+  return false;
+}
+
+/**
+ * Apply an AI facts patch without allowing nulls to erase stored facts or
+ * unsupported model output to replace stable identity/location fields. Stable
+ * changes are accepted only when the newest reporter message explicitly
+ * contains the candidate value; safety/status fields remain updateable so a
+ * reporter can correct a prior injury or access description.
+ */
+export function mergeConfirmedFacts(
+  currentFacts: CaseFactsPatch,
+  factsPatch: CaseFactsPatch,
+  latestBody: string
+): CaseFactsPatch {
+  const merged: Record<string, unknown> = { ...currentFacts };
+
+  for (const [rawKey, value] of Object.entries(factsPatch)) {
+    const key = rawKey as keyof CaseFactsPatch;
+    if (value === null || value === undefined) continue;
+
+    const currentValue = currentFacts[key];
+    if (
+      STABLE_FACT_KEYS.has(key) &&
+      currentValue !== undefined &&
+      currentValue !== null &&
+      currentValue === value
+    ) {
+      continue;
+    }
+
+    // Stable identity/count/location fields are only accepted when the
+    // newest reporter turn explicitly supports the candidate. This protects
+    // both existing facts from replacement and empty facts from hallucinated
+    // model additions.
+    if (
+      STABLE_FACT_KEYS.has(key) &&
+      !explicitlyMentionsFact(key, value, latestBody)
+    ) {
+      continue;
+    }
+
+    // A false immediate-danger patch is meaningful only when the reporter
+    // explicitly resolves the hazard; otherwise it could erase a confirmed
+    // active threat from a model omission or stale summary.
+    if (
+      key === "immediateDanger" &&
+      currentValue === true &&
+      value === false &&
+      !/(?:everyone|everybody|all\s+(?:occupants|people)|we|they)\s+(?:is|are|was|were)\s+(?:now\s+)?safe\b|\b(?:fire|flames?|smoke|flood(?:water)?|water|danger|hazard)\b[\s\S]{0,50}\b(?:ended|stopped|gone|out|over|no\s+longer\s+(?:active|rising|flowing))\b/i.test(
+        latestBody
+      )
+    ) {
+      continue;
+    }
+
+    merged[key] = value;
+  }
+
+  return merged as CaseFactsPatch;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -376,7 +502,11 @@ async function runAiAnalysis(
   // Apply factsPatch updates (spec §3 step 5)
   if (Object.keys(analysis.factsPatch).length > 0) {
     const currentFacts = (caseRow.facts as CaseFactsPatch) ?? {};
-    const updatedFacts = { ...currentFacts, ...analysis.factsPatch };
+    const updatedFacts = mergeConfirmedFacts(
+      currentFacts,
+      analysis.factsPatch,
+      latestBody
+    );
     await db
       .update(schema.reliefCases)
       .set({ facts: updatedFacts, updatedAt: new Date() })

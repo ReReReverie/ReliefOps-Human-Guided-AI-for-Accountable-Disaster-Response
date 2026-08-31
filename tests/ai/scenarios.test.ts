@@ -18,7 +18,7 @@
  *
  * No live Neon DB or Ollama required — all dependencies mocked.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { computeMessageStyle } from "@/features/ai/capitalization";
 import {
   IntakeAnalysisSchema,
@@ -1151,11 +1151,11 @@ describe("OllamaAiProvider model-output regressions", () => {
   it("fills missing deterministic communication fields before validation", async () => {
     const { OllamaAiProvider } = await import("@/features/ai/ollama");
     const provider = new OllamaAiProvider();
-    const {
-      uppercaseLetterRatio: _omittedUppercaseRatio,
-      uppercaseEmphasis: _omittedUppercaseEmphasis,
-      ...signalsWithoutDeterministicFields
-    } = MOCK_FIXTURES.A.communicationSignals;
+    const signalsWithoutDeterministicFields = Object.fromEntries(
+      Object.entries(MOCK_FIXTURES.A.communicationSignals).filter(
+        ([key]) => key !== "uppercaseLetterRatio" && key !== "uppercaseEmphasis"
+      )
+    );
     const malformedPayload = {
       ...MOCK_FIXTURES.A,
       communicationSignals: signalsWithoutDeterministicFields,

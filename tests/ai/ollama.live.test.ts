@@ -56,9 +56,12 @@ function normalizedQuestionText(message: string): string {
 }
 
 function expectNoRepeatedQuestion(message: string, previousMessage: string): void {
-  expect(normalizedQuestionText(message)).not.toBe(
-    normalizedQuestionText(previousMessage)
-  );
+  const currentQuestion = normalizedQuestionText(message);
+  const previousQuestion = normalizedQuestionText(previousMessage);
+  // A completed caller-details turn is intentionally allowed to contain no
+  // question. Comparing two empty extracts would report a false repeat.
+  if (!currentQuestion || !previousQuestion) return;
+  expect(currentQuestion).not.toBe(previousQuestion);
 }
 
 function expectNoSensitiveReporterRequest(message: string): void {
